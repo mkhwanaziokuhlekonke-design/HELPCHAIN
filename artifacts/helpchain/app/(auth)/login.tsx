@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -18,6 +19,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
 
+const logo = require("@/assets/images/logo.jpeg");
+
 export default function UserLoginScreen() {
   const colors = useColors();
   const { login, signup, locationGranted } = useAuth();
@@ -31,6 +34,7 @@ export default function UserLoginScreen() {
   const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
+
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const bottomPad = Platform.OS === "web" ? 34 : insets.bottom;
 
@@ -49,7 +53,7 @@ export default function UserLoginScreen() {
         router.replace("/(tabs)" as any);
       }
     } else {
-      Alert.alert("Login Failed", "Invalid email or password. Try john@example.com / password123");
+      Alert.alert("Login Failed", "Invalid email or password.\n\nDemo: john@example.com / password123");
     }
   }
 
@@ -73,15 +77,16 @@ export default function UserLoginScreen() {
   }
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.background }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+    <KeyboardAvoidingView
+      style={{ flex: 1, backgroundColor: "#1F2937" }}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
       <LinearGradient colors={["#1F2937", "#2563EB"]} style={[styles.header, { paddingTop: topPad + 16 }]}>
         <Pressable onPress={() => router.back()} style={styles.backBtn}>
           <Feather name="arrow-left" size={22} color="rgba(255,255,255,0.8)" />
         </Pressable>
         <View style={styles.headerContent}>
-          <View style={styles.userIconWrap}>
-            <Feather name="user" size={40} color="#fff" />
-          </View>
+          <Image source={logo} style={styles.logoImage} resizeMode="contain" />
           <Text style={styles.headerTitle}>User {mode === "login" ? "Sign In" : "Sign Up"}</Text>
           <Text style={styles.headerSub}>Request help or support your community</Text>
         </View>
@@ -107,6 +112,7 @@ export default function UserLoginScreen() {
       </LinearGradient>
 
       <ScrollView
+        style={{ backgroundColor: colors.background }}
         contentContainerStyle={[styles.form, { paddingBottom: bottomPad + 24 }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
@@ -210,7 +216,10 @@ export default function UserLoginScreen() {
           <Text style={[styles.switchText, { color: colors.mutedForeground }]}>
             {mode === "login" ? "Don't have an account? " : "Already have an account? "}
           </Text>
-          <Pressable onPress={() => { setMode(mode === "login" ? "signup" : "login"); setName(""); setEmail(""); setPhone(""); setPassword(""); }}>
+          <Pressable onPress={() => {
+            setMode(mode === "login" ? "signup" : "login");
+            setName(""); setEmail(""); setPhone(""); setPassword("");
+          }}>
             <Text style={[styles.switchLink, { color: colors.primary }]}>
               {mode === "login" ? "Sign Up" : "Sign In"}
             </Text>
@@ -225,7 +234,6 @@ const styles = StyleSheet.create({
   header: {
     paddingHorizontal: 24,
     paddingBottom: 0,
-    gap: 0,
   },
   backBtn: {
     width: 38,
@@ -239,15 +247,10 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingBottom: 20,
   },
-  userIconWrap: {
-    width: 80,
-    height: 80,
+  logoImage: {
+    width: 100,
+    height: 100,
     borderRadius: 24,
-    backgroundColor: "rgba(255,255,255,0.12)",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 2,
-    borderColor: "rgba(255,255,255,0.2)",
     marginBottom: 4,
   },
   headerTitle: {
@@ -266,7 +269,6 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.1)",
     borderRadius: 12,
     padding: 4,
-    marginBottom: -1,
   },
   modeTab: {
     flex: 1,

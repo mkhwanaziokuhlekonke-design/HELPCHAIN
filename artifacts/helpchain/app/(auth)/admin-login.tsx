@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -17,6 +18,8 @@ import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
+
+const logo = require("@/assets/images/logo.jpeg");
 
 export default function AdminLoginScreen() {
   const colors = useColors();
@@ -72,8 +75,8 @@ export default function AdminLoginScreen() {
         </Pressable>
 
         <View style={styles.headerContent}>
-          <View style={styles.shieldWrap}>
-            <Feather name="shield" size={44} color="#fff" />
+          <View style={styles.logoWrap}>
+            <Image source={logo} style={styles.logoImage} resizeMode="contain" />
             <View style={styles.lockBadge}>
               <Feather name="lock" size={12} color="#14B8A6" />
             </View>
@@ -172,7 +175,6 @@ const styles = StyleSheet.create({
   header: {
     paddingHorizontal: 24,
     paddingBottom: 32,
-    gap: 0,
   },
   backBtn: {
     width: 38,
@@ -185,26 +187,33 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
   },
-  shieldWrap: {
-    width: 90,
-    height: 90,
+  logoWrap: {
+    position: "relative",
+    width: 100,
+    height: 100,
+  },
+  logoImage: {
+    width: 100,
+    height: 100,
     borderRadius: 26,
-    backgroundColor: "rgba(255,255,255,0.1)",
-    alignItems: "center",
-    justifyContent: "center",
     borderWidth: 2,
-    borderColor: "rgba(255,255,255,0.15)",
+    borderColor: "rgba(255,255,255,0.2)",
   },
   lockBadge: {
     position: "absolute",
-    bottom: 10,
-    right: 10,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    bottom: 4,
+    right: 4,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     backgroundColor: "#fff",
     alignItems: "center",
     justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 3,
   },
   headerTitle: {
     fontSize: 26,

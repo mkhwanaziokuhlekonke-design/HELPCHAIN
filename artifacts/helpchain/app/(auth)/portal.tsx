@@ -1,16 +1,12 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React from "react";
-import {
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Image, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
+
+const logo = require("@/assets/images/logo.jpeg");
 
 export default function PortalScreen() {
   const colors = useColors();
@@ -25,14 +21,8 @@ export default function PortalScreen() {
         colors={["#1F2937", "#2563EB", "#0EA5E9"]}
         style={[styles.header, { paddingTop: topPad }]}
       >
-        <View style={styles.logoRow}>
-          <View style={styles.logoIcon}>
-            <Feather name="shield" size={38} color="#fff" />
-            <View style={styles.logoDot} />
-          </View>
-        </View>
-        <Text style={styles.appName}>HelpChain</Text>
-        <Text style={styles.slogan}>Help together. grow together.</Text>
+        <Image source={logo} style={styles.logoImage} resizeMode="contain" />
+        <Text style={styles.slogan}>Help together. Grow together.</Text>
       </LinearGradient>
 
       <View style={[styles.body, { paddingBottom: bottomPad }]}>
@@ -97,40 +87,16 @@ export default function PortalScreen() {
 const styles = StyleSheet.create({
   header: {
     paddingHorizontal: 24,
-    paddingBottom: 40,
+    paddingBottom: 32,
     alignItems: "center",
     gap: 10,
   },
-  logoRow: {
-    marginTop: 16,
+  logoImage: {
+    width: 160,
+    height: 160,
+    borderRadius: 32,
+    marginTop: 12,
     marginBottom: 4,
-  },
-  logoIcon: {
-    width: 88,
-    height: 88,
-    borderRadius: 24,
-    backgroundColor: "rgba(255,255,255,0.12)",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 2,
-    borderColor: "rgba(255,255,255,0.2)",
-  },
-  logoDot: {
-    position: "absolute",
-    bottom: 14,
-    right: 14,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: "#14B8A6",
-    borderWidth: 2,
-    borderColor: "#fff",
-  },
-  appName: {
-    fontSize: 34,
-    fontFamily: "Inter_700Bold",
-    color: "#fff",
-    letterSpacing: -0.5,
   },
   slogan: {
     fontSize: 14,
