@@ -17,7 +17,7 @@ export default function SplashIndex() {
         if (user) {
           router.replace("/(tabs)" as any);
         } else {
-          router.replace("/(auth)/login" as any);
+          router.replace("/(auth)/portal" as any);
         }
       }, 1800);
       return () => clearTimeout(timer);
