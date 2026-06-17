@@ -47,18 +47,18 @@ export default function LoginScreen() {
         router.replace("/(tabs)" as any);
       }
     } else {
-      Alert.alert("Login Failed", "Invalid email or password. Try admin@helpchain.com / admin123");
+      Alert.alert("Login Failed", "Invalid email or password.\n\nDemo: admin@helpchain.com / admin123");
     }
   }
 
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.background }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-      <LinearGradient colors={["#0F172A", "#1B4FD8"]} style={[styles.header, { paddingTop: topPad + 20 }]}>
+      <LinearGradient colors={["#1F2937", "#2563EB"]} style={[styles.header, { paddingTop: topPad + 20 }]}>
         <View style={styles.logoRow}>
           <Feather name="shield" size={36} color="#fff" />
           <Text style={styles.logoText}>HelpChain</Text>
         </View>
-        <Text style={styles.headerSub}>Welcome back</Text>
+        <Text style={styles.headerSub}>Help together. grow together.</Text>
       </LinearGradient>
 
       <ScrollView contentContainerStyle={[styles.form, { paddingBottom: bottomPad + 24 }]} keyboardShouldPersistTaps="handled">
@@ -146,9 +146,9 @@ const styles = StyleSheet.create({
     color: "#fff",
   },
   headerSub: {
-    fontSize: 16,
+    fontSize: 14,
     fontFamily: "Inter_400Regular",
-    color: "rgba(255,255,255,0.7)",
+    color: "rgba(255,255,255,0.65)",
   },
   form: {
     padding: 24,

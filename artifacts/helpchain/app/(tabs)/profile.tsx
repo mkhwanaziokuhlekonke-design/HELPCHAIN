@@ -17,26 +17,16 @@ import { useAuth } from "@/context/AuthContext";
 import { useHelp } from "@/context/HelpContext";
 import { useColors } from "@/hooks/useColors";
 
-function MenuItem({
-  icon,
-  label,
-  onPress,
-  color,
-  danger,
-}: {
-  icon: string;
-  label: string;
-  onPress: () => void;
-  color?: string;
-  danger?: boolean;
+function MenuItem({ icon, label, onPress, color, danger }: {
+  icon: string; label: string; onPress: () => void; color?: string; danger?: boolean;
 }) {
   const colors = useColors();
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [styles.menuItem, { backgroundColor: colors.card, opacity: pressed ? 0.8 : 1 }]}
+      style={({ pressed }) => [styles.menuItem, { backgroundColor: colors.card, opacity: pressed ? 0.8 : 1, borderBottomColor: colors.border }]}
     >
-      <View style={[styles.menuIcon, { backgroundColor: (color ?? colors.primary) + "18" }]}>
+      <View style={[styles.menuIcon, { backgroundColor: (danger ? colors.destructive : (color ?? colors.primary)) + "18" }]}>
         <Feather name={icon as any} size={18} color={danger ? colors.destructive : (color ?? colors.primary)} />
       </View>
       <Text style={[styles.menuLabel, { color: danger ? colors.destructive : colors.foreground }]}>{label}</Text>
@@ -77,14 +67,14 @@ export default function ProfileScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
-      <LinearGradient colors={["#0F172A", "#1B4FD8"]} style={[styles.headerGrad, { paddingTop: topPad }]}>
+      <LinearGradient colors={["#1F2937", "#2563EB"]} style={[styles.headerGrad, { paddingTop: topPad }]}>
         <UserAvatar name={user.name} size={80} isAdmin={user.isAdmin} />
         <Text style={styles.userName}>{user.name}</Text>
         <Text style={styles.userEmail}>{user.email}</Text>
         {user.isAdmin && (
-          <View style={styles.adminBadge}>
-            <Feather name="shield" size={12} color="#EA580C" />
-            <Text style={styles.adminBadgeText}>Admin</Text>
+          <View style={[styles.adminBadge, { backgroundColor: "rgba(20,184,166,0.25)" }]}>
+            <Feather name="shield" size={12} color="#14B8A6" />
+            <Text style={[styles.adminBadgeText, { color: "#14B8A6" }]}>Admin</Text>
           </View>
         )}
       </LinearGradient>
@@ -108,8 +98,8 @@ export default function ProfileScreen() {
           {[
             { icon: "phone", label: "Phone", value: user.phone },
             { icon: "calendar", label: "Member since", value: new Date(user.createdAt).toLocaleDateString() },
-          ].map((row) => (
-            <View key={row.label} style={[styles.infoRow, { borderBottomColor: colors.border }]}>
+          ].map((row, i, arr) => (
+            <View key={row.label} style={[styles.infoRow, { borderBottomColor: colors.border, borderBottomWidth: i < arr.length - 1 ? 1 : 0 }]}>
               <Feather name={row.icon as any} size={15} color={colors.primary} />
               <View style={{ flex: 1 }}>
                 <Text style={[styles.infoLabel, { color: colors.mutedForeground }]}>{row.label}</Text>
@@ -122,28 +112,12 @@ export default function ProfileScreen() {
         <Text style={[styles.sectionHead, { color: colors.mutedForeground }]}>ACTIONS</Text>
         <View style={[styles.menuGroup, { borderColor: colors.border }]}>
           {user.isAdmin && (
-            <MenuItem
-              icon="settings"
-              label="Admin Dashboard"
-              onPress={() => router.push("/admin" as any)}
-              color={colors.accent}
-            />
+            <MenuItem icon="settings" label="Admin Dashboard" onPress={() => router.push("/admin" as any)} color={colors.accent} />
           )}
-          <MenuItem
-            icon="list"
-            label="My Requests"
-            onPress={() => router.push("/(tabs)/requests" as any)}
-          />
-          <MenuItem
-            icon="bell"
-            label="Notifications"
-            onPress={() => router.push("/(tabs)/notifications" as any)}
-          />
-          <MenuItem
-            icon="map-pin"
-            label="Update Location Preference"
-            onPress={() => router.push("/(auth)/location" as any)}
-          />
+          <MenuItem icon="list" label="My Requests" onPress={() => router.push("/(tabs)/requests" as any)} />
+          <MenuItem icon="message-circle" label="Community Chat" onPress={() => router.push("/(tabs)/chat" as any)} color={colors.accent} />
+          <MenuItem icon="bell" label="Notifications" onPress={() => router.push("/(tabs)/notifications" as any)} />
+          <MenuItem icon="map-pin" label="Update Location" onPress={() => router.push("/(auth)/location" as any)} />
         </View>
 
         <View style={[styles.menuGroup, { borderColor: colors.border, marginTop: 8 }]}>
@@ -161,39 +135,19 @@ const styles = StyleSheet.create({
     paddingBottom: 28,
     gap: 8,
   },
-  userName: {
-    fontSize: 24,
-    fontFamily: "Inter_700Bold",
-    color: "#fff",
-    marginTop: 4,
-  },
-  userEmail: {
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
-    color: "rgba(255,255,255,0.7)",
-  },
+  userName: { fontSize: 24, fontFamily: "Inter_700Bold", color: "#fff", marginTop: 4 },
+  userEmail: { fontSize: 14, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.7)" },
   adminBadge: {
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
-    backgroundColor: "rgba(234,88,12,0.2)",
     paddingHorizontal: 12,
     paddingVertical: 4,
     borderRadius: 20,
   },
-  adminBadgeText: {
-    color: "#EA580C",
-    fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
-  },
-  scroll: {
-    padding: 16,
-    gap: 12,
-  },
-  statsRow: {
-    flexDirection: "row",
-    gap: 10,
-  },
+  adminBadgeText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  scroll: { padding: 16, gap: 12 },
+  statsRow: { flexDirection: "row", gap: 10 },
   statCard: {
     flex: 1,
     borderRadius: 14,
@@ -206,65 +160,15 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
-  statVal: {
-    fontSize: 24,
-    fontFamily: "Inter_700Bold",
-  },
-  statLabel: {
-    fontSize: 10,
-    fontFamily: "Inter_500Medium",
-  },
-  infoCard: {
-    borderRadius: 14,
-    borderWidth: 1,
-    overflow: "hidden",
-  },
-  infoRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    padding: 14,
-    borderBottomWidth: 1,
-  },
-  infoLabel: {
-    fontSize: 11,
-    fontFamily: "Inter_400Regular",
-    marginBottom: 2,
-  },
-  infoValue: {
-    fontSize: 14,
-    fontFamily: "Inter_500Medium",
-  },
-  sectionHead: {
-    fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
-    letterSpacing: 0.8,
-    marginTop: 4,
-    marginLeft: 4,
-  },
-  menuGroup: {
-    borderRadius: 14,
-    borderWidth: 1,
-    overflow: "hidden",
-    gap: 0,
-  },
-  menuItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-    padding: 16,
-    borderBottomWidth: 0,
-  },
-  menuIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 11,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  menuLabel: {
-    flex: 1,
-    fontSize: 15,
-    fontFamily: "Inter_500Medium",
-  },
+  statVal: { fontSize: 24, fontFamily: "Inter_700Bold" },
+  statLabel: { fontSize: 10, fontFamily: "Inter_500Medium" },
+  infoCard: { borderRadius: 14, borderWidth: 1, overflow: "hidden" },
+  infoRow: { flexDirection: "row", alignItems: "center", gap: 12, padding: 14 },
+  infoLabel: { fontSize: 11, fontFamily: "Inter_400Regular", marginBottom: 2 },
+  infoValue: { fontSize: 14, fontFamily: "Inter_500Medium" },
+  sectionHead: { fontSize: 11, fontFamily: "Inter_600SemiBold", letterSpacing: 0.8, marginTop: 4, marginLeft: 4 },
+  menuGroup: { borderRadius: 14, borderWidth: 1, overflow: "hidden" },
+  menuItem: { flexDirection: "row", alignItems: "center", gap: 14, padding: 16, borderBottomWidth: 1 },
+  menuIcon: { width: 38, height: 38, borderRadius: 11, alignItems: "center", justifyContent: "center" },
+  menuLabel: { flex: 1, fontSize: 15, fontFamily: "Inter_500Medium" },
 });

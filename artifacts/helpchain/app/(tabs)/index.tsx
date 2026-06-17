@@ -35,7 +35,7 @@ export default function HomeScreen() {
   const emergencyRequests = requests.filter((r) => r.isEmergency && r.status === "open");
   const recentOpen = requests.filter((r) => r.status === "open" && !r.isEmergency).slice(0, 3);
 
-  function handlePress(action: () => void) {
+  function tap(action: () => void) {
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     action();
   }
@@ -47,25 +47,72 @@ export default function HomeScreen() {
     return "Good evening";
   };
 
+  const isAdmin = user?.isAdmin ?? false;
+
+  const ACTION_BUTTONS = [
+    {
+      key: "request",
+      icon: "life-buoy",
+      title: "Request Help",
+      sub: "Post a help request",
+      colors: ["#2563EB", "#1D4ED8"] as [string, string],
+      onPress: () => tap(() => router.push("/request/new" as any)),
+      show: true,
+    },
+    {
+      key: "emergency",
+      icon: "alert-triangle",
+      title: "Emergency",
+      sub: "Get urgent help now",
+      colors: ["#DC2626", "#B91C1C"] as [string, string],
+      onPress: () =>
+        tap(() => {
+          router.push("/request/new" as any);
+        }),
+      show: true,
+    },
+    {
+      key: "chat",
+      icon: "message-circle",
+      title: "Community Chat",
+      sub: "Talk with your community",
+      colors: ["#14B8A6", "#0D9488"] as [string, string],
+      onPress: () => tap(() => router.push("/(tabs)/chat" as any)),
+      show: true,
+    },
+    {
+      key: "donate",
+      icon: "gift",
+      title: "Donate",
+      sub: "Support HelpChain",
+      colors: ["#0EA5E9", "#0284C7"] as [string, string],
+      onPress: () => tap(() => setDonateVisible(true)),
+      show: !isAdmin,
+    },
+  ];
+
+  const visibleButtons = ACTION_BUTTONS.filter((b) => b.show);
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
-      <LinearGradient colors={["#0F172A", "#1E3A8A"]} style={[styles.headerGrad, { paddingTop: topPad }]}>
+      <LinearGradient colors={["#1F2937", "#1E3A8A"]} style={[styles.headerGrad, { paddingTop: topPad }]}>
         <View style={styles.headerRow}>
           <View style={styles.greetingCol}>
             <Text style={styles.greetingSmall}>{greeting()},</Text>
             <Text style={styles.greetingName}>{user?.name?.split(" ")[0] ?? "Friend"}</Text>
+            <Text style={styles.slogan}>Help together. grow together.</Text>
           </View>
           <View style={styles.headerRight}>
-            {user?.isAdmin && (
+            {isAdmin && (
               <Pressable
-                onPress={() => handlePress(() => router.push("/admin" as any))}
-                style={[styles.adminBtn, { backgroundColor: colors.accent }]}
+                onPress={() => tap(() => router.push("/admin" as any))}
+                style={[styles.adminBtn, { backgroundColor: "#14B8A6" }]}
               >
                 <Feather name="settings" size={14} color="#fff" />
                 <Text style={styles.adminBtnText}>Admin</Text>
               </Pressable>
             )}
-            <UserAvatar name={user?.name ?? "U"} size={42} isAdmin={user?.isAdmin} />
+            <UserAvatar name={user?.name ?? "U"} size={44} isAdmin={isAdmin} />
           </View>
         </View>
       </LinearGradient>
@@ -87,7 +134,7 @@ export default function HomeScreen() {
               <Text style={[styles.emergencyLabel, { color: colors.emergency }]}>
                 {emergencyRequests.length} Active Emergency{emergencyRequests.length > 1 ? " Alerts" : ""}
               </Text>
-              <Text style={[styles.emergencyTitle, { color: "#7F1D1D" }]} numberOfLines={1}>
+              <Text style={{ color: "#7F1D1D", fontSize: 13, fontFamily: "Inter_500Medium" }} numberOfLines={1}>
                 {emergencyRequests[0].title}
               </Text>
             </View>
@@ -97,7 +144,7 @@ export default function HomeScreen() {
 
         <View style={styles.statsRow}>
           {[
-            { label: "Open Requests", val: requests.filter((r) => r.status === "open").length, color: colors.primary },
+            { label: "Open", val: requests.filter((r) => r.status === "open").length, color: colors.primary },
             { label: "In Progress", val: requests.filter((r) => r.status === "accepted").length, color: colors.accent },
             { label: "Completed", val: requests.filter((r) => r.status === "completed").length, color: colors.success },
           ].map((s) => (
@@ -110,38 +157,38 @@ export default function HomeScreen() {
 
         <Text style={[styles.sectionTitle, { color: colors.foreground }]}>What do you need?</Text>
 
-        <View style={styles.actionButtons}>
-          <Pressable
-            onPress={() => handlePress(() => router.push("/request/new" as any))}
-            style={({ pressed }) => [styles.bigBtn, { opacity: pressed ? 0.92 : 1 }]}
-          >
-            <LinearGradient colors={["#1B4FD8", "#1E40AF"]} style={styles.bigBtnInner}>
-              <Feather name="life-buoy" size={36} color="#fff" />
-              <Text style={styles.bigBtnTitle}>Request Help</Text>
-              <Text style={styles.bigBtnSub}>Post a request for assistance</Text>
-            </LinearGradient>
-          </Pressable>
-
-          <Pressable
-            onPress={() => handlePress(() => router.push("/(tabs)/requests" as any))}
-            style={({ pressed }) => [styles.bigBtn, { opacity: pressed ? 0.92 : 1 }]}
-          >
-            <LinearGradient colors={["#EA580C", "#C2410C"]} style={styles.bigBtnInner}>
-              <Feather name="heart" size={36} color="#fff" />
-              <Text style={styles.bigBtnTitle}>Offer Help</Text>
-              <Text style={styles.bigBtnSub}>Browse open requests</Text>
-            </LinearGradient>
-          </Pressable>
+        <View style={styles.buttonGrid}>
+          {visibleButtons.map((btn) => (
+            <Pressable
+              key={btn.key}
+              onPress={btn.onPress}
+              style={({ pressed }) => [
+                styles.actionBtn,
+                { opacity: pressed ? 0.9 : 1 },
+                visibleButtons.length % 2 !== 0 && btn === visibleButtons[visibleButtons.length - 1]
+                  ? styles.actionBtnFull
+                  : styles.actionBtnHalf,
+              ]}
+            >
+              <LinearGradient colors={btn.colors} style={styles.actionBtnInner}>
+                <View style={styles.actionIconRing}>
+                  <Feather name={btn.icon as any} size={28} color="#fff" />
+                </View>
+                <Text style={styles.actionTitle}>{btn.title}</Text>
+                <Text style={styles.actionSub}>{btn.sub}</Text>
+              </LinearGradient>
+            </Pressable>
+          ))}
         </View>
 
-        <Pressable
-          onPress={() => setDonateVisible(true)}
-          style={({ pressed }) => [styles.donateBtn, { borderColor: colors.accent, backgroundColor: colors.orangeLight, opacity: pressed ? 0.9 : 1 }]}
-        >
-          <Feather name="gift" size={20} color={colors.accent} />
-          <Text style={[styles.donateBtnText, { color: colors.accent }]}>Donate to HelpChain</Text>
-          <Feather name="chevron-right" size={16} color={colors.accent} />
-        </Pressable>
+        {isAdmin && (
+          <View style={[styles.adminInfoCard, { backgroundColor: "#F0FDFA", borderColor: "#14B8A6" }]}>
+            <Feather name="info" size={16} color="#14B8A6" />
+            <Text style={{ color: "#0F766E", fontSize: 13, fontFamily: "Inter_500Medium", flex: 1 }}>
+              You have admin access. Use the Admin panel to monitor all activity.
+            </Text>
+          </View>
+        )}
 
         {recentOpen.length > 0 && (
           <>
@@ -162,9 +209,12 @@ export default function HomeScreen() {
         <View style={styles.modalOverlay}>
           <View style={[styles.donateModal, { backgroundColor: colors.card }]}>
             <View style={styles.modalHandle} />
-            <Text style={[styles.modalTitle, { color: colors.foreground }]}>Donate to HelpChain</Text>
+            <LinearGradient colors={["#0EA5E9", "#2563EB"]} style={styles.modalHeader}>
+              <Feather name="gift" size={32} color="#fff" />
+              <Text style={styles.modalTitle}>Donate to HelpChain</Text>
+            </LinearGradient>
             <Text style={[styles.modalSub, { color: colors.mutedForeground }]}>
-              Your donation helps keep HelpChain free for everyone who needs it.
+              Your donation keeps HelpChain free for everyone who needs it.
             </Text>
 
             <View style={styles.amountGrid}>
@@ -175,12 +225,12 @@ export default function HomeScreen() {
                   style={[
                     styles.amountBtn,
                     {
-                      borderColor: selectedAmount === amt ? colors.accent : colors.border,
-                      backgroundColor: selectedAmount === amt ? colors.orangeLight : colors.card,
+                      borderColor: selectedAmount === amt ? colors.primary : colors.border,
+                      backgroundColor: selectedAmount === amt ? colors.secondary : colors.card,
                     },
                   ]}
                 >
-                  <Text style={[styles.amountText, { color: selectedAmount === amt ? colors.accent : colors.foreground }]}>
+                  <Text style={[styles.amountText, { color: selectedAmount === amt ? colors.primary : colors.foreground }]}>
                     ${amt}
                   </Text>
                 </Pressable>
@@ -190,15 +240,19 @@ export default function HomeScreen() {
             <Pressable
               onPress={() => {
                 setDonateVisible(false);
-                Alert.alert("Thank you!", `Your $${selectedAmount ?? 10} donation helps keep HelpChain free for all. (Demo mode — no real payment processed)`);
+                setSelectedAmount(null);
+                Alert.alert(
+                  "Thank you!",
+                  `Your $${selectedAmount ?? 10} donation helps keep HelpChain free for all.\n\n(Demo mode — no real payment processed)`
+                );
               }}
-              style={[styles.donateSendBtn, { backgroundColor: colors.accent }]}
+              style={[styles.donateSendBtn, { backgroundColor: colors.primary }]}
             >
               <Feather name="heart" size={18} color="#fff" />
               <Text style={styles.donateSendText}>Donate {selectedAmount ? `$${selectedAmount}` : ""}</Text>
             </Pressable>
 
-            <Pressable onPress={() => setDonateVisible(false)} style={styles.cancelBtn}>
+            <Pressable onPress={() => { setDonateVisible(false); setSelectedAmount(null); }} style={styles.cancelBtn}>
               <Text style={[styles.cancelText, { color: colors.mutedForeground }]}>Cancel</Text>
             </Pressable>
           </View>
@@ -211,29 +265,36 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   headerGrad: {
     paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingBottom: 22,
   },
   headerRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
-    paddingTop: 12,
+    paddingTop: 14,
   },
-  greetingCol: { gap: 2 },
+  greetingCol: { gap: 2, flex: 1 },
   greetingSmall: {
     fontSize: 13,
     fontFamily: "Inter_400Regular",
-    color: "rgba(255,255,255,0.65)",
+    color: "rgba(255,255,255,0.6)",
   },
   greetingName: {
-    fontSize: 22,
+    fontSize: 24,
     fontFamily: "Inter_700Bold",
     color: "#fff",
+  },
+  slogan: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    color: "rgba(255,255,255,0.5)",
+    marginTop: 2,
   },
   headerRight: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
+    marginLeft: 12,
   },
   adminBtn: {
     flexDirection: "row",
@@ -259,7 +320,6 @@ const styles = StyleSheet.create({
     padding: 14,
     borderRadius: 14,
     borderWidth: 1.5,
-    marginBottom: 2,
   },
   emergencyIcon: {
     width: 40,
@@ -273,11 +333,6 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_600SemiBold",
     textTransform: "uppercase",
     letterSpacing: 0.5,
-  },
-  emergencyTitle: {
-    fontSize: 13,
-    fontFamily: "Inter_500Medium",
-    marginTop: 2,
   },
   statsRow: {
     flexDirection: "row",
@@ -319,45 +374,56 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: "Inter_500Medium",
   },
-  actionButtons: {
+  buttonGrid: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 12,
   },
-  bigBtn: {
-    flex: 1,
+  actionBtn: {
     borderRadius: 18,
     overflow: "hidden",
   },
-  bigBtnInner: {
+  actionBtnHalf: {
+    width: "47.5%",
+  },
+  actionBtnFull: {
+    width: "100%",
+  },
+  actionBtnInner: {
     padding: 20,
     alignItems: "center",
     gap: 10,
-    minHeight: 160,
+    minHeight: 150,
     justifyContent: "center",
   },
-  bigBtnTitle: {
-    color: "#fff",
-    fontSize: 16,
-    fontFamily: "Inter_700Bold",
+  actionIconRing: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "rgba(255,255,255,0.18)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
   },
-  bigBtnSub: {
-    color: "rgba(255,255,255,0.75)",
+  actionTitle: {
+    color: "#fff",
+    fontSize: 15,
+    fontFamily: "Inter_700Bold",
+    textAlign: "center",
+  },
+  actionSub: {
+    color: "rgba(255,255,255,0.72)",
     fontSize: 11,
     fontFamily: "Inter_400Regular",
     textAlign: "center",
   },
-  donateBtn: {
+  adminInfoCard: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
     gap: 10,
-    height: 52,
-    borderRadius: 14,
-    borderWidth: 1.5,
-  },
-  donateBtnText: {
-    fontSize: 15,
-    fontFamily: "Inter_600SemiBold",
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
   },
   modalOverlay: {
     flex: 1,
@@ -367,8 +433,9 @@ const styles = StyleSheet.create({
   donateModal: {
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    padding: 24,
+    overflow: "hidden",
     gap: 16,
+    paddingBottom: 24,
   },
   modalHandle: {
     width: 36,
@@ -376,11 +443,17 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     backgroundColor: "#E2E8F0",
     alignSelf: "center",
-    marginBottom: 4,
+    marginTop: 12,
+  },
+  modalHeader: {
+    alignItems: "center",
+    padding: 24,
+    gap: 12,
   },
   modalTitle: {
     fontSize: 22,
     fontFamily: "Inter_700Bold",
+    color: "#fff",
     textAlign: "center",
   },
   modalSub: {
@@ -388,11 +461,13 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     textAlign: "center",
     lineHeight: 20,
+    paddingHorizontal: 24,
   },
   amountGrid: {
     flexDirection: "row",
     gap: 10,
     flexWrap: "wrap",
+    paddingHorizontal: 24,
   },
   amountBtn: {
     flex: 1,
@@ -414,6 +489,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 10,
+    marginHorizontal: 24,
   },
   donateSendText: {
     color: "#fff",

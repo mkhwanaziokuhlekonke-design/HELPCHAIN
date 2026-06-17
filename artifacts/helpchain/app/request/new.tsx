@@ -122,7 +122,7 @@ export default function NewRequestScreen() {
 
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.background }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-      <LinearGradient colors={["#0F172A", "#1B4FD8"]} style={[styles.header, { paddingTop: topPad }]}>
+      <LinearGradient colors={["#1F2937", "#2563EB"]} style={[styles.header, { paddingTop: topPad }]}>
         <View style={styles.headerRow}>
           <Pressable onPress={() => router.back()} style={styles.closeBtn}>
             <Feather name="x" size={22} color="#fff" />

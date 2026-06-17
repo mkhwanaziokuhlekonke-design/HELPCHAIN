@@ -34,11 +34,7 @@ export default function LocationScreen() {
       } else {
         if ("geolocation" in navigator) {
           await new Promise<void>((resolve) => {
-            navigator.geolocation.getCurrentPosition(
-              () => resolve(),
-              () => resolve(),
-              { timeout: 5000 }
-            );
+            navigator.geolocation.getCurrentPosition(() => resolve(), () => resolve(), { timeout: 5000 });
           });
         }
         await setLocationGranted(true);
@@ -59,7 +55,7 @@ export default function LocationScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background, paddingTop: topPad }]}>
       <LinearGradient
-        colors={["#1B4FD8", "#EA580C"]}
+        colors={["#2563EB", "#14B8A6"]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.iconContainer}
@@ -79,8 +75,8 @@ export default function LocationScreen() {
             { icon: "alert-triangle", text: "Share location in emergencies" },
             { icon: "navigation", text: "Get directions to help others" },
           ].map((item) => (
-            <View key={item.text} style={[styles.featureRow, { backgroundColor: colors.secondary }]}>
-              <View style={[styles.featureIcon, { backgroundColor: colors.primary + "20" }]}>
+            <View key={item.text} style={[styles.featureRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <View style={[styles.featureIcon, { backgroundColor: colors.primary + "18" }]}>
                 <Feather name={item.icon as any} size={16} color={colors.primary} />
               </View>
               <Text style={[styles.featureText, { color: colors.foreground }]}>{item.text}</Text>
@@ -154,6 +150,7 @@ const styles = StyleSheet.create({
     gap: 14,
     padding: 14,
     borderRadius: 12,
+    borderWidth: 1,
   },
   featureIcon: {
     width: 36,

@@ -55,7 +55,7 @@ export default function SignupScreen() {
 
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.background }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-      <LinearGradient colors={["#0F172A", "#EA580C"]} style={[styles.header, { paddingTop: topPad + 20 }]}>
+      <LinearGradient colors={["#1F2937", "#14B8A6"]} style={[styles.header, { paddingTop: topPad + 20 }]}>
         <Pressable onPress={() => router.back()} style={styles.backBtn}>
           <Feather name="arrow-left" size={22} color="#fff" />
         </Pressable>
@@ -63,16 +63,16 @@ export default function SignupScreen() {
           <Feather name="shield" size={32} color="#fff" />
           <Text style={styles.logoText}>HelpChain</Text>
         </View>
-        <Text style={styles.headerSub}>Join the community</Text>
+        <Text style={styles.headerSub}>Join your community today</Text>
       </LinearGradient>
 
       <ScrollView contentContainerStyle={[styles.form, { paddingBottom: bottomPad + 24 }]} keyboardShouldPersistTaps="handled">
         <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Create Account</Text>
 
         {[
-          { label: "Full Name", icon: "user", value: name, setter: setName, placeholder: "Your full name", keyboardType: "default" as const },
-          { label: "Email", icon: "mail", value: email, setter: setEmail, placeholder: "you@example.com", keyboardType: "email-address" as const },
-          { label: "Phone Number", icon: "phone", value: phone, setter: setPhone, placeholder: "+1 555 000 0000", keyboardType: "phone-pad" as const },
+          { label: "Full Name", icon: "user", value: name, setter: setName, placeholder: "Your full name", keyboard: "default" as const },
+          { label: "Email", icon: "mail", value: email, setter: setEmail, placeholder: "you@example.com", keyboard: "email-address" as const },
+          { label: "Phone Number", icon: "phone", value: phone, setter: setPhone, placeholder: "+1 555 000 0000", keyboard: "phone-pad" as const },
         ].map((field) => (
           <View key={field.label} style={styles.inputGroup}>
             <Text style={[styles.label, { color: colors.mutedForeground }]}>{field.label}</Text>
@@ -84,7 +84,7 @@ export default function SignupScreen() {
                 placeholderTextColor={colors.mutedForeground}
                 value={field.value}
                 onChangeText={field.setter}
-                keyboardType={field.keyboardType}
+                keyboardType={field.keyboard}
                 autoCapitalize={field.label === "Email" ? "none" : "words"}
                 autoCorrect={false}
               />
@@ -154,9 +154,9 @@ const styles = StyleSheet.create({
     color: "#fff",
   },
   headerSub: {
-    fontSize: 15,
+    fontSize: 14,
     fontFamily: "Inter_400Regular",
-    color: "rgba(255,255,255,0.75)",
+    color: "rgba(255,255,255,0.7)",
   },
   form: {
     padding: 24,

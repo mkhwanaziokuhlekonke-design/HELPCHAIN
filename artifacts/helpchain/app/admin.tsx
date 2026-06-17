@@ -39,9 +39,9 @@ export default function AdminScreen() {
 
   const STATS = [
     { label: "Total Users", val: allUsers.length, icon: "users", color: colors.primary, bg: colors.secondary },
-    { label: "Open Requests", val: openRequests, icon: "list", color: colors.success, bg: "#F0FDF4" },
+    { label: "Open Requests", val: openRequests, icon: "list", color: colors.success, bg: "#ECFDF5" },
     { label: "Emergencies", val: emergencyCount, icon: "alert-triangle", color: colors.destructive, bg: "#FEF2F2" },
-    { label: "Completed", val: completedCount, icon: "check-circle", color: "#7C3AED", bg: "#F5F3FF" },
+    { label: "Completed", val: completedCount, icon: "check-circle", color: colors.accent, bg: colors.tealLight },
   ];
 
   const TABS: { key: Tab; label: string }[] = [
@@ -52,10 +52,7 @@ export default function AdminScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
-      <LinearGradient
-        colors={["#0F172A", "#1B4FD8"]}
-        style={[styles.header, { paddingTop: topPad }]}
-      >
+      <LinearGradient colors={["#1F2937", "#2563EB"]} style={[styles.header, { paddingTop: topPad }]}>
         <View style={styles.headerRow}>
           <Pressable onPress={() => router.back()} style={styles.backBtn}>
             <Feather name="arrow-left" size={22} color="#fff" />
@@ -76,7 +73,7 @@ export default function AdminScreen() {
               onPress={() => setTab(t.key)}
               style={[styles.tab, tab === t.key && styles.tabActive]}
             >
-              <Text style={[styles.tabText, { color: tab === t.key ? "#fff" : "rgba(255,255,255,0.6)" }]}>
+              <Text style={[styles.tabText, { color: tab === t.key ? "#fff" : "rgba(255,255,255,0.55)" }]}>
                 {t.label}
               </Text>
             </Pressable>
@@ -99,11 +96,11 @@ export default function AdminScreen() {
           </View>
 
           <View style={[styles.progressCard, { backgroundColor: colors.card }]}>
-            <Text style={[styles.progressTitle, { color: colors.foreground }]}>Request Status</Text>
+            <Text style={[styles.progressTitle, { color: colors.foreground }]}>Request Status Breakdown</Text>
             {[
               { label: "Open", count: openRequests, color: colors.success },
               { label: "Accepted", count: acceptedCount, color: colors.primary },
-              { label: "Completed", count: completedCount, color: "#7C3AED" },
+              { label: "Completed", count: completedCount, color: colors.accent },
             ].map((item) => (
               <View key={item.label} style={styles.progressRow}>
                 <Text style={[styles.progressLabel, { color: colors.mutedForeground }]}>{item.label}</Text>
@@ -151,14 +148,9 @@ export default function AdminScreen() {
               <View style={{ flex: 1, gap: 4 }}>
                 <View style={styles.requestRowTop}>
                   <CategoryBadge category={item.category} isEmergency={item.isEmergency} size="sm" />
-                  <View style={[styles.statusPill, { backgroundColor: item.status === "open" ? "#F0FDF4" : item.status === "completed" ? "#EFF6FF" : "#FFFBEB" }]}>
-                    <Text style={[styles.statusPillText, { color: item.status === "open" ? colors.success : item.status === "completed" ? colors.primary : colors.warning }]}>
-                      {item.status}
-                    </Text>
-                  </View>
                 </View>
                 <Text style={[styles.requestTitle, { color: colors.foreground }]} numberOfLines={1}>{item.title}</Text>
-                <Text style={[styles.requestBy, { color: colors.mutedForeground }]}>by {item.requesterName}</Text>
+                <Text style={[styles.requestBy, { color: colors.mutedForeground }]}>by {item.requesterName} · {item.status}</Text>
               </View>
               <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
             </Pressable>
@@ -197,222 +189,42 @@ export default function AdminScreen() {
 }
 
 const styles = StyleSheet.create({
-  header: {
-    paddingHorizontal: 20,
-    paddingBottom: 0,
-    gap: 0,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingTop: 12,
-    paddingBottom: 16,
-  },
-  backBtn: {
-    width: 38,
-    height: 38,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontFamily: "Inter_700Bold",
-    color: "#fff",
-  },
-  adminTag: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 20,
-  },
-  adminTagText: {
-    color: "#fff",
-    fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
-  },
-  tabRow: {
-    flexDirection: "row",
-    gap: 4,
-    paddingBottom: 0,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 12,
-    alignItems: "center",
-    borderBottomWidth: 2,
-    borderBottomColor: "transparent",
-  },
-  tabActive: {
-    borderBottomColor: "#fff",
-  },
-  tabText: {
-    fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
-  },
-  scroll: {
-    padding: 16,
-    gap: 10,
-  },
-  statsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-  },
-  statCard: {
-    width: "47.5%",
-    borderRadius: 14,
-    padding: 16,
-    alignItems: "flex-start",
-    gap: 8,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  statIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  statVal: {
-    fontSize: 28,
-    fontFamily: "Inter_700Bold",
-  },
-  statLabel: {
-    fontSize: 12,
-    fontFamily: "Inter_500Medium",
-  },
-  progressCard: {
-    borderRadius: 14,
-    padding: 16,
-    gap: 14,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  progressTitle: {
-    fontSize: 15,
-    fontFamily: "Inter_700Bold",
-  },
-  progressRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  progressLabel: {
-    fontSize: 12,
-    fontFamily: "Inter_500Medium",
-    width: 68,
-  },
-  progressBar: {
-    flex: 1,
-    height: 6,
-    borderRadius: 3,
-    overflow: "hidden",
-  },
-  progressFill: {
-    height: "100%",
-    borderRadius: 3,
-  },
-  progressCount: {
-    fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
-    width: 24,
-    textAlign: "right",
-  },
-  sectionHead: {
-    fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
-    letterSpacing: 0.8,
-    marginTop: 4,
-    marginLeft: 2,
-  },
-  activityItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  activityTitle: {
-    flex: 1,
-    fontSize: 13,
-    fontFamily: "Inter_500Medium",
-  },
-  activityStatus: {
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
-  },
-  requestRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    padding: 14,
-    borderRadius: 14,
-    borderWidth: 1,
-  },
-  requestRowTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  statusPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 20,
-  },
-  statusPillText: {
-    fontSize: 10,
-    fontFamily: "Inter_600SemiBold",
-  },
-  requestTitle: {
-    fontSize: 14,
-    fontFamily: "Inter_500Medium",
-  },
-  requestBy: {
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
-  },
-  userRow: {
-    flexDirection: "row",
-    gap: 14,
-    padding: 14,
-    borderRadius: 14,
-    borderWidth: 1,
-    alignItems: "center",
-  },
-  userNameRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  userName: {
-    fontSize: 15,
-    fontFamily: "Inter_600SemiBold",
-  },
-  adminPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 20,
-  },
-  adminPillText: {
-    fontSize: 10,
-    fontFamily: "Inter_600SemiBold",
-  },
-  userEmail: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
-  },
-  userStats: {
-    fontSize: 11,
-    fontFamily: "Inter_400Regular",
-  },
+  header: { paddingHorizontal: 20, paddingBottom: 0 },
+  headerRow: { flexDirection: "row", alignItems: "center", paddingTop: 12, paddingBottom: 16 },
+  backBtn: { width: 38, height: 38, alignItems: "center", justifyContent: "center" },
+  headerTitle: { fontSize: 18, fontFamily: "Inter_700Bold", color: "#fff" },
+  adminTag: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
+  adminTagText: { color: "#fff", fontSize: 11, fontFamily: "Inter_600SemiBold" },
+  tabRow: { flexDirection: "row", gap: 4 },
+  tab: { flex: 1, paddingVertical: 12, alignItems: "center", borderBottomWidth: 2, borderBottomColor: "transparent" },
+  tabActive: { borderBottomColor: "#fff" },
+  tabText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  scroll: { padding: 16, gap: 10 },
+  statsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  statCard: { width: "47.5%", borderRadius: 14, padding: 16, alignItems: "flex-start", gap: 8, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 },
+  statIcon: { width: 44, height: 44, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  statVal: { fontSize: 28, fontFamily: "Inter_700Bold" },
+  statLabel: { fontSize: 12, fontFamily: "Inter_500Medium" },
+  progressCard: { borderRadius: 14, padding: 16, gap: 14, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 },
+  progressTitle: { fontSize: 15, fontFamily: "Inter_700Bold" },
+  progressRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  progressLabel: { fontSize: 12, fontFamily: "Inter_500Medium", width: 68 },
+  progressBar: { flex: 1, height: 6, borderRadius: 3, overflow: "hidden" },
+  progressFill: { height: "100%", borderRadius: 3 },
+  progressCount: { fontSize: 13, fontFamily: "Inter_600SemiBold", width: 24, textAlign: "right" },
+  sectionHead: { fontSize: 11, fontFamily: "Inter_600SemiBold", letterSpacing: 0.8, marginTop: 4, marginLeft: 2 },
+  activityItem: { flexDirection: "row", alignItems: "center", gap: 10, padding: 12, borderRadius: 12, borderWidth: 1 },
+  activityTitle: { flex: 1, fontSize: 13, fontFamily: "Inter_500Medium" },
+  activityStatus: { fontSize: 12, fontFamily: "Inter_400Regular" },
+  requestRow: { flexDirection: "row", alignItems: "center", gap: 12, padding: 14, borderRadius: 14, borderWidth: 1 },
+  requestRowTop: { flexDirection: "row", alignItems: "center", gap: 8 },
+  requestTitle: { fontSize: 14, fontFamily: "Inter_500Medium" },
+  requestBy: { fontSize: 12, fontFamily: "Inter_400Regular" },
+  userRow: { flexDirection: "row", gap: 14, padding: 14, borderRadius: 14, borderWidth: 1, alignItems: "center" },
+  userNameRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  userName: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
+  adminPill: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 20 },
+  adminPillText: { fontSize: 10, fontFamily: "Inter_600SemiBold" },
+  userEmail: { fontSize: 13, fontFamily: "Inter_400Regular" },
+  userStats: { fontSize: 11, fontFamily: "Inter_400Regular" },
 });

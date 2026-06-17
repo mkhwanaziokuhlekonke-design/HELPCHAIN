@@ -27,7 +27,7 @@ export default function SplashIndex() {
   const topPad = Platform.OS === "web" ? 67 : insets.top;
 
   return (
-    <LinearGradient colors={["#0F172A", "#1B4FD8", "#1E40AF"]} style={[styles.container, { paddingTop: topPad }]}>
+    <LinearGradient colors={["#1F2937", "#2563EB", "#0EA5E9"]} style={[styles.container, { paddingTop: topPad }]}>
       <View style={styles.content}>
         <View style={styles.iconWrapper}>
           <Feather name="shield" size={72} color="#fff" />
@@ -35,7 +35,7 @@ export default function SplashIndex() {
         </View>
 
         <Text style={styles.title}>HelpChain</Text>
-        <Text style={styles.tagline}>Connect. Help. Thrive.</Text>
+        <Text style={styles.tagline}>Help together. grow together.</Text>
 
         <View style={styles.loader}>
           <ActivityIndicator color="rgba(255,255,255,0.7)" size="small" />
@@ -78,7 +78,7 @@ const styles = StyleSheet.create({
     width: 16,
     height: 16,
     borderRadius: 8,
-    backgroundColor: "#EA580C",
+    backgroundColor: "#14B8A6",
     borderWidth: 2,
     borderColor: "#fff",
   },
@@ -91,8 +91,8 @@ const styles = StyleSheet.create({
   tagline: {
     fontSize: 16,
     fontFamily: "Inter_400Regular",
-    color: "rgba(255,255,255,0.7)",
-    letterSpacing: 0.5,
+    color: "rgba(255,255,255,0.8)",
+    letterSpacing: 0.3,
   },
   loader: {
     marginTop: 32,
