@@ -50,30 +50,32 @@ export default function HomeScreen() {
   const isAdmin = user?.isAdmin ?? false;
 
   const ACTION_BUTTONS = [
-    {
-      key: "request",
-      icon: "life-buoy",
-      title: "Request Help",
-      sub: "Post a help request",
-      colors: ["#2563EB", "#1D4ED8"] as [string, string],
-      onPress: () => tap(() => router.push("/request/new" as any)),
-    },
-    {
-      key: "emergency",
-      icon: "alert-triangle",
-      title: "Emergency",
-      sub: "Get urgent help now",
-      colors: ["#DC2626", "#B91C1C"] as [string, string],
-      onPress: () => tap(() => router.push("/request/new" as any)),
-    },
-    {
-      key: "chat",
-      icon: "message-circle",
-      title: "Community Chat",
-      sub: "Talk with your community",
-      colors: ["#14B8A6", "#0D9488"] as [string, string],
-      onPress: () => tap(() => router.push("/(tabs)/chat" as any)),
-    },
+    ...(!isAdmin ? [
+      {
+        key: "request",
+        icon: "life-buoy",
+        title: "Request Help",
+        sub: "Post a help request",
+        colors: ["#2563EB", "#1D4ED8"] as [string, string],
+        onPress: () => tap(() => router.push("/request/new" as any)),
+      },
+      {
+        key: "emergency",
+        icon: "alert-triangle",
+        title: "Emergency",
+        sub: "Get urgent help now",
+        colors: ["#DC2626", "#B91C1C"] as [string, string],
+        onPress: () => tap(() => router.push("/request/new" as any)),
+      },
+      {
+        key: "chat",
+        icon: "message-circle",
+        title: "Community Chat",
+        sub: "Talk with your community",
+        colors: ["#14B8A6", "#0D9488"] as [string, string],
+        onPress: () => tap(() => router.push("/(tabs)/chat" as any)),
+      },
+    ] : []),
     ...(!isAdmin
       ? [
           {
