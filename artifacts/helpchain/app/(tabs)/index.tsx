@@ -11,18 +11,298 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
+import Svg, { Circle, Path, Line as SvgLine, Text as SvgText, G } from "react-native-svg";
 import * as Haptics from "expo-haptics";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { UserAvatar } from "@/components/UserAvatar";
 import { LiveLocationMap } from "@/components/LiveLocationMap";
 import { useAuth } from "@/context/AuthContext";
+import { useHelp } from "@/context/HelpContext";
+import { useChat } from "@/context/ChatContext";
 import { useDonations } from "@/context/DonationContext";
 import { useColors } from "@/hooks/useColors";
 
 const logo = require("@/assets/images/logo.jpeg");
 
+/* ─── shared helpers ─── */
+function timeAgo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+function statusColor(status: string) {
+  if (status === "open") return "#10B981";
+  if (status === "accepted") return "#F59E0B";
+  if (status === "completed") return "#14B8A6";
+  return "#9CA3AF";
+}
+function statusLabel(status: string) {
+  if (status === "open") return "New";
+  if (status === "accepted") return "In Progress";
+  return status.charAt(0).toUpperCase() + status.slice(1);
+}
+
+const CHART_POINTS = {
+  requests: [200, 350, 480, 600, 780, 900, 1000],
+  donations: [80, 180, 300, 410, 540, 660, 760],
+  users: [50, 140, 240, 350, 460, 540, 600],
+};
+
+function buildPath(data: number[], w: number, h: number, maxY: number) {
+  const pts = data.map((v, i) => ({
+    x: (i / (data.length - 1)) * w,
+    y: h - (v / maxY) * (h - 16),
+  }));
+  let d = `M ${pts[0].x} ${pts[0].y}`;
+  for (let i = 1; i < pts.length; i++) {
+    const cx = (pts[i - 1].x + pts[i].x) / 2;
+    d += ` C ${cx} ${pts[i - 1].y}, ${cx} ${pts[i].y}, ${pts[i].x} ${pts[i].y}`;
+  }
+  return d;
+}
+
+function MiniChart({ width }: { width: number }) {
+  const W = width - 32;
+  const H = 140;
+  const maxY = 1200;
+  return (
+    <View style={{ paddingHorizontal: 4 }}>
+      <Svg width={W} height={H + 24}>
+        {[0, 400, 800, 1200].map((val) => {
+          const y = H - (val / maxY) * (H - 16) + 2;
+          return (
+            <G key={val}>
+              <SvgLine x1={0} y1={y} x2={W} y2={y} stroke="#E2E8F0" strokeWidth={1} />
+              <SvgText x={-2} y={y + 4} fontSize={8} fill="#94A3B8" textAnchor="end">
+                {val === 0 ? "0" : val >= 1000 ? `${val / 1000}k` : val}
+              </SvgText>
+            </G>
+          );
+        })}
+        <Path d={buildPath(CHART_POINTS.requests, W, H, maxY)} fill="none" stroke="#3B82F6" strokeWidth={2} />
+        <Path d={buildPath(CHART_POINTS.donations, W, H, maxY)} fill="none" stroke="#14B8A6" strokeWidth={2} />
+        <Path d={buildPath(CHART_POINTS.users, W, H, maxY)} fill="none" stroke="#A78BFA" strokeWidth={2} />
+        {CHART_POINTS.requests.map((v, i) => (
+          <Circle key={`r${i}`} cx={(i / 6) * W} cy={H - (v / maxY) * (H - 16)} r={3} fill="#3B82F6" />
+        ))}
+        {CHART_POINTS.donations.map((v, i) => (
+          <Circle key={`d${i}`} cx={(i / 6) * W} cy={H - (v / maxY) * (H - 16)} r={3} fill="#14B8A6" />
+        ))}
+        {CHART_POINTS.users.map((v, i) => (
+          <Circle key={`u${i}`} cx={(i / 6) * W} cy={H - (v / maxY) * (H - 16)} r={3} fill="#A78BFA" />
+        ))}
+        {["1", "11", "21", "31"].map((lbl, i) => (
+          <SvgText key={lbl} x={(i / 3) * W} y={H + 16} fontSize={8} fill="#94A3B8" textAnchor="middle">{lbl}</SvgText>
+        ))}
+      </Svg>
+      <View style={{ flexDirection: "row", gap: 14, paddingLeft: 4, marginTop: 4 }}>
+        {[{ c: "#3B82F6", l: "Requests" }, { c: "#14B8A6", l: "Donations" }, { c: "#A78BFA", l: "Users" }].map((s) => (
+          <View key={s.l} style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+            <View style={{ width: 18, height: 3, backgroundColor: s.c, borderRadius: 2 }} />
+            <Text style={{ fontSize: 10, color: "#64748B", fontFamily: "Inter_400Regular" }}>{s.l}</Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+const PENDING_REPORTS = [
+  { id: "rep1", title: "Inappropriate Content", desc: "Reported in General Chat", time: "10 min ago", color: "#EF4444" },
+  { id: "rep2", title: "Spam User", desc: "User: john_doe123", time: "25 min ago", color: "#EF4444" },
+  { id: "rep3", title: "Harassment", desc: "Reported in Food Support", time: "45 min ago", color: "#F59E0B" },
+  { id: "rep4", title: "Fake Request", desc: "Request ID: REQ12345", time: "1 hr ago", color: "#F59E0B" },
+];
+
+const SYSTEM_SUMMARY = [
+  { label: "Total Categories", val: "24" },
+  { label: "Verified Volunteers", val: "1,256" },
+  { label: "Messages (This Month)", val: "8,745" },
+  { label: "App Version", val: "1.2.3" },
+  { label: "Total Downloads", val: "25,680" },
+];
+
+/* ─── admin dashboard (inline) ─── */
+function AdminDashboard() {
+  const { allUsers } = useAuth();
+  const { requests } = useHelp();
+  const { donations, totalRaised } = useDonations();
+  const { messages } = useChat();
+  const router = useRouter();
+  const { width } = useWindowDimensions();
+
+  const openReqs = requests.filter((r) => r.status === "open").length;
+  const completedReqs = requests.filter((r) => r.status === "completed").length;
+
+  const STATS = [
+    { label: "Total Users", val: String(allUsers.length), icon: "user", bg: "#3B82F6", trend: "+12.5%" },
+    { label: "Active Requests", val: String(openReqs), icon: "activity", bg: "#10B981", trend: "+8.3%" },
+    { label: "Completed", val: String(completedReqs), icon: "check-circle", bg: "#8B5CF6", trend: "+15.7%" },
+    { label: "Donations Made", val: String(donations.length), icon: "gift", bg: "#F59E0B", trend: "+10.2%" },
+    { label: "Community Groups", val: "86", icon: "users", bg: "#EC4899", trend: "+6.4%" },
+    { label: "Pending Reports", val: String(PENDING_REPORTS.length), icon: "alert-circle", bg: "#EF4444", trend: "↓3.2%" },
+  ];
+
+  return (
+    <View style={{ gap: 14 }}>
+      {/* Stat cards */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingRight: 4 }}>
+        {STATS.map((s) => (
+          <View key={s.label} style={adm.statCard}>
+            <View style={[adm.statCircle, { backgroundColor: s.bg }]}>
+              <Feather name={s.icon as any} size={18} color="#fff" />
+            </View>
+            <Text style={adm.statVal}>{s.val}</Text>
+            <Text style={adm.statLabel}>{s.label}</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 3, marginTop: 2 }}>
+              <Feather name="trending-up" size={9} color="#10B981" />
+              <Text style={{ fontSize: 9, color: "#10B981", fontFamily: "Inter_400Regular" }}>{s.trend} from last month</Text>
+            </View>
+          </View>
+        ))}
+      </ScrollView>
+
+      {/* Overview chart */}
+      <View style={adm.card}>
+        <View style={adm.cardHead}>
+          <Text style={adm.cardTitle}>Overview <Text style={{ color: "#94A3B8", fontFamily: "Inter_400Regular", fontSize: 12 }}>(This Month)</Text></Text>
+          <View style={adm.pill}><Text style={adm.pillText}>This Month</Text><Feather name="chevron-down" size={11} color="#64748B" /></View>
+        </View>
+        <MiniChart width={width - 32} />
+      </View>
+
+      {/* Live map */}
+      <View style={adm.card}>
+        <View style={adm.cardHead}>
+          <Text style={adm.cardTitle}>Live Activity Map</Text>
+          <View style={adm.pill}><Text style={adm.pillText}>All Activities</Text><Feather name="chevron-down" size={11} color="#64748B" /></View>
+        </View>
+        {Platform.OS === "web" ? (
+          <iframe
+            src="https://www.openstreetmap.org/export/embed.html?bbox=-74.05,40.69,-73.97,40.73&layer=mapnik"
+            style={{ width: "100%", height: 170, border: "none", borderRadius: 8 } as any}
+            title="Live Activity Map"
+          />
+        ) : (
+          <View style={{ height: 170, backgroundColor: "#DBEAFE", borderRadius: 8, alignItems: "center", justifyContent: "center", gap: 6 }}>
+            <Feather name="map" size={32} color="#3B82F6" />
+            <Text style={{ color: "#1D4ED8", fontSize: 13, fontFamily: "Inter_600SemiBold" }}>Live Activity Map</Text>
+          </View>
+        )}
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 10 }}>
+          {[
+            { color: "#3B82F6", label: "Active Requests" },
+            { color: "#10B981", label: "Donations" },
+            { color: "#8B5CF6", label: "Volunteers" },
+            { color: "#F59E0B", label: "Community Groups" },
+          ].map((l) => (
+            <View key={l.label} style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+              <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: l.color }} />
+              <Text style={{ fontSize: 10, color: "#64748B", fontFamily: "Inter_400Regular" }}>{l.label}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+
+      {/* Recent Requests */}
+      <View style={adm.card}>
+        <View style={adm.cardHead}>
+          <Text style={adm.cardTitle}>Recent Requests</Text>
+          <Pressable onPress={() => router.push("/admin" as any)}>
+            <Text style={adm.viewAll}>View All</Text>
+          </Pressable>
+        </View>
+        {requests.slice(0, 4).map((req) => (
+          <View key={req.id} style={adm.row}>
+            <View style={[adm.avatar, { backgroundColor: req.isEmergency ? "#FEE2E2" : "#DBEAFE" }]}>
+              <Text style={[adm.avatarText, { color: req.isEmergency ? "#EF4444" : "#2563EB" }]}>{req.requesterName.charAt(0)}</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={adm.rowTitle} numberOfLines={1}>{req.title}</Text>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 3, marginTop: 2 }}>
+                <Feather name="map-pin" size={9} color="#94A3B8" />
+                <Text style={adm.rowSub}>{req.location?.address ?? "Your City"}</Text>
+              </View>
+            </View>
+            <View style={[adm.badge, { backgroundColor: statusColor(req.status) + "20" }]}>
+              <Text style={[adm.badgeText, { color: statusColor(req.status) }]}>{statusLabel(req.status)}</Text>
+            </View>
+          </View>
+        ))}
+      </View>
+
+      {/* Recent Donations */}
+      <View style={adm.card}>
+        <View style={adm.cardHead}>
+          <Text style={adm.cardTitle}>Recent Donations</Text>
+          <Pressable onPress={() => router.push("/admin" as any)}>
+            <Text style={adm.viewAll}>View All</Text>
+          </Pressable>
+        </View>
+        {donations.slice(0, 4).map((d) => (
+          <View key={d.id} style={adm.row}>
+            <View style={[adm.avatar, { backgroundColor: "#FFFBEB" }]}>
+              <Feather name="gift" size={16} color="#F59E0B" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={adm.rowTitle}>{d.message ?? "Donation"}</Text>
+              <Text style={adm.rowSub}>By {d.donorName}</Text>
+            </View>
+            <View style={{ alignItems: "flex-end" }}>
+              <Text style={{ fontSize: 15, fontFamily: "Inter_700Bold", color: "#F59E0B" }}>${d.amount}</Text>
+              <Text style={{ fontSize: 10, color: "#14B8A6", fontFamily: "Inter_400Regular" }}>{timeAgo(d.createdAt)}</Text>
+            </View>
+          </View>
+        ))}
+      </View>
+
+      {/* Pending Reports */}
+      <View style={adm.card}>
+        <View style={adm.cardHead}>
+          <Text style={adm.cardTitle}>Pending Reports</Text>
+          <Pressable onPress={() => router.push("/admin" as any)}>
+            <Text style={adm.viewAll}>View All</Text>
+          </Pressable>
+        </View>
+        {PENDING_REPORTS.map((r) => (
+          <View key={r.id} style={adm.row}>
+            <View style={[adm.avatar, { backgroundColor: r.color + "15" }]}>
+              <Feather name="flag" size={14} color={r.color} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={adm.rowTitle}>{r.title}</Text>
+              <Text style={adm.rowSub}>{r.desc}</Text>
+            </View>
+            <Text style={{ fontSize: 10, color: "#94A3B8", fontFamily: "Inter_400Regular" }}>{r.time}</Text>
+          </View>
+        ))}
+      </View>
+
+      {/* System Summary */}
+      <View style={adm.card}>
+        <Text style={[adm.cardTitle, { marginBottom: 10 }]}>System Summary</Text>
+        {SYSTEM_SUMMARY.map((s, i) => (
+          <View key={s.label} style={[adm.summaryRow, i < SYSTEM_SUMMARY.length - 1 && { borderBottomWidth: 1, borderBottomColor: "#F1F5F9" }]}>
+            <Text style={{ fontSize: 13, fontFamily: "Inter_500Medium", color: "#475569" }}>{s.label}</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+              <Text style={{ fontSize: 13, fontFamily: "Inter_700Bold", color: "#1E293B" }}>{s.val}</Text>
+              <Feather name="chevron-right" size={13} color="#CBD5E1" />
+            </View>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+/* ─── main screen ─── */
 export default function HomeScreen() {
   const colors = useColors();
   const { user } = useAuth();
@@ -50,48 +330,43 @@ export default function HomeScreen() {
   const isAdmin = user?.isAdmin ?? false;
 
   const ACTION_BUTTONS = [
-    ...(!isAdmin ? [
-      {
-        key: "request",
-        icon: "life-buoy",
-        title: "Request Help",
-        sub: "Post a help request",
-        colors: ["#2563EB", "#1D4ED8"] as [string, string],
-        onPress: () => tap(() => router.push("/request/new" as any)),
-      },
-      {
-        key: "emergency",
-        icon: "alert-triangle",
-        title: "Emergency",
-        sub: "Get urgent help now",
-        colors: ["#DC2626", "#B91C1C"] as [string, string],
-        onPress: () => tap(() => router.push("/request/new" as any)),
-      },
-      {
-        key: "chat",
-        icon: "message-circle",
-        title: "Community Chat",
-        sub: "Talk with your community",
-        colors: ["#14B8A6", "#0D9488"] as [string, string],
-        onPress: () => tap(() => router.push("/(tabs)/chat" as any)),
-      },
-    ] : []),
-    ...(!isAdmin
-      ? [
-          {
-            key: "donate",
-            icon: "gift",
-            title: "Donate",
-            sub: "Support HelpChain",
-            colors: ["#0EA5E9", "#0284C7"] as [string, string],
-            onPress: () => tap(() => setDonateVisible(true)),
-          },
-        ]
-      : []),
+    {
+      key: "request",
+      icon: "life-buoy",
+      title: "Request Help",
+      sub: "Post a help request",
+      colors: ["#2563EB", "#1D4ED8"] as [string, string],
+      onPress: () => tap(() => router.push("/request/new" as any)),
+    },
+    {
+      key: "emergency",
+      icon: "alert-triangle",
+      title: "Emergency",
+      sub: "Get urgent help now",
+      colors: ["#DC2626", "#B91C1C"] as [string, string],
+      onPress: () => tap(() => router.push("/request/new" as any)),
+    },
+    {
+      key: "chat",
+      icon: "message-circle",
+      title: "Community Chat",
+      sub: "Talk with your community",
+      colors: ["#14B8A6", "#0D9488"] as [string, string],
+      onPress: () => tap(() => router.push("/(tabs)/chat" as any)),
+    },
+    {
+      key: "donate",
+      icon: "gift",
+      title: "Donate",
+      sub: "Support HelpChain",
+      colors: ["#0EA5E9", "#0284C7"] as [string, string],
+      onPress: () => tap(() => setDonateVisible(true)),
+    },
   ];
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.background }}>
+    <View style={{ flex: 1, backgroundColor: isAdmin ? "#F1F5F9" : colors.background }}>
+      {/* Header */}
       <LinearGradient colors={["#1F2937", "#1E3A8A"]} style={[styles.headerGrad, { paddingTop: topPad }]}>
         <View style={styles.headerRow}>
           <View style={styles.greetingCol}>
@@ -106,7 +381,7 @@ export default function HomeScreen() {
                 style={[styles.adminBtn, { backgroundColor: "#14B8A6" }]}
               >
                 <Feather name="settings" size={14} color="#fff" />
-                <Text style={styles.adminBtnText}>Admin</Text>
+                <Text style={styles.adminBtnText}>Full View</Text>
               </Pressable>
             )}
             <UserAvatar name={user?.name ?? "U"} size={44} isAdmin={isAdmin} />
@@ -114,271 +389,183 @@ export default function HomeScreen() {
         </View>
       </LinearGradient>
 
+      {/* Body */}
       <ScrollView
         style={{ flex: 1 }}
-        contentContainerStyle={[styles.scroll, { paddingBottom: bottomPad }]}
+        contentContainerStyle={[{ paddingBottom: bottomPad }, isAdmin ? { padding: 14, gap: 0 } : styles.scroll]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Live Location Map */}
-        <LiveLocationMap />
-
-        {/* Action Buttons */}
-        <View style={styles.buttonGrid}>
-          {ACTION_BUTTONS.map((btn) => (
-            <Pressable
-              key={btn.key}
-              onPress={btn.onPress}
-              style={({ pressed }) => [
-                styles.actionBtn,
-                styles.actionBtnHalf,
-                { opacity: pressed ? 0.9 : 1 },
-              ]}
-            >
-              <LinearGradient colors={btn.colors} style={styles.actionBtnInner}>
-                <View style={styles.actionIconRing}>
-                  <Feather name={btn.icon as any} size={28} color="#fff" />
-                </View>
-                <Text style={styles.actionTitle}>{btn.title}</Text>
-                <Text style={styles.actionSub}>{btn.sub}</Text>
-              </LinearGradient>
-            </Pressable>
-          ))}
-        </View>
-      </ScrollView>
-
-      {/* Donate Modal */}
-      <Modal visible={donateVisible} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={[styles.donateModal, { backgroundColor: colors.card }]}>
-            <View style={styles.modalHandle} />
-            <LinearGradient colors={["#0EA5E9", "#2563EB"]} style={styles.modalHeader}>
-              <Image source={logo} style={styles.modalLogo} resizeMode="contain" />
-              <Text style={styles.modalTitle}>Donate to HelpChain</Text>
-            </LinearGradient>
-            <Text style={[styles.modalSub, { color: colors.mutedForeground }]}>
-              Your donation keeps HelpChain free for everyone who needs it.
-            </Text>
-
-            <View style={styles.amountGrid}>
-              {[5, 10, 25, 50].map((amt) => (
+        {isAdmin ? (
+          <AdminDashboard />
+        ) : (
+          <>
+            <LiveLocationMap />
+            <View style={styles.buttonGrid}>
+              {ACTION_BUTTONS.map((btn) => (
                 <Pressable
-                  key={amt}
-                  onPress={() => setSelectedAmount(amt)}
-                  style={[
-                    styles.amountBtn,
-                    {
-                      borderColor: selectedAmount === amt ? colors.primary : colors.border,
-                      backgroundColor: selectedAmount === amt ? colors.secondary : colors.card,
-                    },
-                  ]}
+                  key={btn.key}
+                  onPress={btn.onPress}
+                  style={({ pressed }) => [styles.actionBtn, styles.actionBtnHalf, { opacity: pressed ? 0.9 : 1 }]}
                 >
-                  <Text style={[styles.amountText, { color: selectedAmount === amt ? colors.primary : colors.foreground }]}>
-                    ${amt}
-                  </Text>
+                  <LinearGradient colors={btn.colors} style={styles.actionBtnInner}>
+                    <View style={styles.actionIconRing}>
+                      <Feather name={btn.icon as any} size={28} color="#fff" />
+                    </View>
+                    <Text style={styles.actionTitle}>{btn.title}</Text>
+                    <Text style={styles.actionSub}>{btn.sub}</Text>
+                  </LinearGradient>
                 </Pressable>
               ))}
             </View>
+          </>
+        )}
+      </ScrollView>
 
-            <Pressable
-              onPress={async () => {
-                const amt = selectedAmount ?? 10;
-                setDonateVisible(false);
-                setSelectedAmount(null);
-                if (user) {
-                  await addDonation(user.id, user.name, amt);
-                }
-                Alert.alert("Thank you!", `Your $${amt} donation has been recorded.\n\n(Demo — no real payment processed)`);
-              }}
-              style={[styles.donateSendBtn, { backgroundColor: colors.primary }]}
-            >
-              <Feather name="heart" size={18} color="#fff" />
-              <Text style={styles.donateSendText}>Donate {selectedAmount ? `$${selectedAmount}` : ""}</Text>
-            </Pressable>
-
-            <Pressable onPress={() => { setDonateVisible(false); setSelectedAmount(null); }} style={styles.cancelBtn}>
-              <Text style={[styles.cancelText, { color: colors.mutedForeground }]}>Cancel</Text>
-            </Pressable>
+      {/* Donate Modal (user only) */}
+      {!isAdmin && (
+        <Modal visible={donateVisible} transparent animationType="slide">
+          <View style={styles.modalOverlay}>
+            <View style={[styles.donateModal, { backgroundColor: colors.card }]}>
+              <View style={styles.modalHandle} />
+              <LinearGradient colors={["#0EA5E9", "#2563EB"]} style={styles.modalHeader}>
+                <Image source={logo} style={styles.modalLogo} resizeMode="contain" />
+                <Text style={styles.modalTitle}>Donate to HelpChain</Text>
+              </LinearGradient>
+              <Text style={[styles.modalSub, { color: colors.mutedForeground }]}>
+                Your donation keeps HelpChain free for everyone who needs it.
+              </Text>
+              <View style={styles.amountGrid}>
+                {[5, 10, 25, 50].map((amt) => (
+                  <Pressable
+                    key={amt}
+                    onPress={() => setSelectedAmount(amt)}
+                    style={[
+                      styles.amountBtn,
+                      {
+                        borderColor: selectedAmount === amt ? colors.primary : colors.border,
+                        backgroundColor: selectedAmount === amt ? colors.secondary : colors.card,
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.amountText, { color: selectedAmount === amt ? colors.primary : colors.foreground }]}>
+                      ${amt}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+              <Pressable
+                onPress={async () => {
+                  const amt = selectedAmount ?? 10;
+                  setDonateVisible(false);
+                  setSelectedAmount(null);
+                  if (user) await addDonation(user.id, user.name, amt);
+                  Alert.alert("Thank you!", `Your $${amt} donation has been recorded.\n\n(Demo — no real payment processed)`);
+                }}
+                style={[styles.donateSendBtn, { backgroundColor: colors.primary }]}
+              >
+                <Feather name="heart" size={18} color="#fff" />
+                <Text style={styles.donateSendText}>Donate {selectedAmount ? `$${selectedAmount}` : ""}</Text>
+              </Pressable>
+              <Pressable onPress={() => { setDonateVisible(false); setSelectedAmount(null); }} style={styles.cancelBtn}>
+                <Text style={[styles.cancelText, { color: colors.mutedForeground }]}>Cancel</Text>
+              </Pressable>
+            </View>
           </View>
-        </View>
-      </Modal>
+        </Modal>
+      )}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  headerGrad: {
-    paddingHorizontal: 20,
-    paddingBottom: 22,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    paddingTop: 14,
-  },
-  greetingCol: { gap: 2, flex: 1 },
-  greetingSmall: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
-    color: "rgba(255,255,255,0.6)",
-  },
-  greetingName: {
-    fontSize: 24,
-    fontFamily: "Inter_700Bold",
-    color: "#fff",
-  },
-  slogan: {
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
-    color: "rgba(255,255,255,0.5)",
-    marginTop: 2,
-  },
-  headerRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginLeft: 12,
-  },
-  adminBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-  adminBtnText: {
-    color: "#fff",
-    fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
-  },
-  scroll: {
-    padding: 16,
-    gap: 16,
-  },
-  buttonGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-  },
-  actionBtn: {
-    borderRadius: 18,
-    overflow: "hidden",
-  },
-  actionBtnHalf: {
-    width: "47.5%",
-  },
-  actionBtnInner: {
-    padding: 20,
-    alignItems: "center",
-    gap: 10,
-    minHeight: 150,
-    justifyContent: "center",
-  },
-  actionIconRing: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: "rgba(255,255,255,0.18)",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 4,
-  },
-  actionTitle: {
-    color: "#fff",
-    fontSize: 15,
-    fontFamily: "Inter_700Bold",
-    textAlign: "center",
-  },
-  actionSub: {
-    color: "rgba(255,255,255,0.72)",
-    fontSize: 11,
-    fontFamily: "Inter_400Regular",
-    textAlign: "center",
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "flex-end",
-  },
-  donateModal: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    overflow: "hidden",
-    gap: 16,
-    paddingBottom: 24,
-  },
-  modalHandle: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: "#E2E8F0",
-    alignSelf: "center",
-    marginTop: 12,
-  },
-  modalHeader: {
-    alignItems: "center",
-    padding: 24,
-    gap: 12,
-  },
-  modalLogo: {
-    width: 60,
-    height: 60,
-    borderRadius: 16,
-  },
-  modalTitle: {
-    fontSize: 22,
-    fontFamily: "Inter_700Bold",
-    color: "#fff",
-    textAlign: "center",
-  },
-  modalSub: {
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
-    textAlign: "center",
-    lineHeight: 20,
-    paddingHorizontal: 24,
-  },
-  amountGrid: {
-    flexDirection: "row",
-    gap: 10,
-    flexWrap: "wrap",
-    paddingHorizontal: 24,
-  },
-  amountBtn: {
-    flex: 1,
-    minWidth: "40%",
-    height: 52,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  amountText: {
-    fontSize: 18,
-    fontFamily: "Inter_700Bold",
-  },
-  donateSendBtn: {
-    height: 54,
+/* ─── admin inline styles ─── */
+const adm = StyleSheet.create({
+  statCard: {
+    width: 130,
+    backgroundColor: "#fff",
     borderRadius: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-    marginHorizontal: 24,
+    padding: 14,
+    gap: 6,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  donateSendText: {
-    color: "#fff",
-    fontSize: 16,
-    fontFamily: "Inter_600SemiBold",
+  statCircle: {
+    width: 44, height: 44, borderRadius: 22,
+    alignItems: "center", justifyContent: "center",
   },
-  cancelBtn: {
-    height: 44,
-    alignItems: "center",
-    justifyContent: "center",
+  statVal: { fontSize: 22, fontFamily: "Inter_700Bold", color: "#1E293B" },
+  statLabel: { fontSize: 11, fontFamily: "Inter_500Medium", color: "#64748B" },
+  card: {
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 14,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
   },
-  cancelText: {
-    fontSize: 14,
-    fontFamily: "Inter_500Medium",
+  cardHead: {
+    flexDirection: "row", alignItems: "center",
+    justifyContent: "space-between", marginBottom: 14,
   },
+  cardTitle: { fontSize: 14, fontFamily: "Inter_700Bold", color: "#1E293B" },
+  pill: {
+    flexDirection: "row", alignItems: "center", gap: 3,
+    backgroundColor: "#F1F5F9", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8,
+  },
+  pillText: { fontSize: 11, color: "#64748B", fontFamily: "Inter_500Medium" },
+  viewAll: { fontSize: 12, color: "#2563EB", fontFamily: "Inter_600SemiBold" },
+  row: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    paddingVertical: 9, borderTopWidth: 1, borderTopColor: "#F8FAFC",
+  },
+  avatar: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center" },
+  avatarText: { fontSize: 14, fontFamily: "Inter_700Bold" },
+  rowTitle: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#1E293B" },
+  rowSub: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#94A3B8" },
+  badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
+  badgeText: { fontSize: 10, fontFamily: "Inter_600SemiBold" },
+  summaryRow: {
+    flexDirection: "row", alignItems: "center",
+    justifyContent: "space-between", paddingVertical: 12,
+  },
+});
+
+/* ─── user home styles ─── */
+const styles = StyleSheet.create({
+  headerGrad: { paddingHorizontal: 20, paddingBottom: 22 },
+  headerRow: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", paddingTop: 14 },
+  greetingCol: { gap: 2, flex: 1 },
+  greetingSmall: { fontSize: 13, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.6)" },
+  greetingName: { fontSize: 24, fontFamily: "Inter_700Bold", color: "#fff" },
+  slogan: { fontSize: 12, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.5)", marginTop: 2 },
+  headerRight: { flexDirection: "row", alignItems: "center", gap: 10, marginLeft: 12 },
+  adminBtn: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20 },
+  adminBtnText: { color: "#fff", fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  scroll: { padding: 16, gap: 16 },
+  buttonGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
+  actionBtn: { borderRadius: 18, overflow: "hidden" },
+  actionBtnHalf: { width: "47.5%" },
+  actionBtnInner: { padding: 20, alignItems: "center", gap: 10, minHeight: 150, justifyContent: "center" },
+  actionIconRing: { width: 56, height: 56, borderRadius: 28, backgroundColor: "rgba(255,255,255,0.18)", alignItems: "center", justifyContent: "center", marginBottom: 4 },
+  actionTitle: { color: "#fff", fontSize: 15, fontFamily: "Inter_700Bold", textAlign: "center" },
+  actionSub: { color: "rgba(255,255,255,0.72)", fontSize: 11, fontFamily: "Inter_400Regular", textAlign: "center" },
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
+  donateModal: { borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: "hidden", gap: 16, paddingBottom: 24 },
+  modalHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: "#E2E8F0", alignSelf: "center", marginTop: 12 },
+  modalHeader: { alignItems: "center", padding: 24, gap: 12 },
+  modalLogo: { width: 60, height: 60, borderRadius: 16 },
+  modalTitle: { fontSize: 22, fontFamily: "Inter_700Bold", color: "#fff", textAlign: "center" },
+  modalSub: { fontSize: 14, fontFamily: "Inter_400Regular", textAlign: "center", lineHeight: 20, paddingHorizontal: 24 },
+  amountGrid: { flexDirection: "row", gap: 10, flexWrap: "wrap", paddingHorizontal: 24 },
+  amountBtn: { flex: 1, minWidth: "40%", height: 52, borderRadius: 12, borderWidth: 1.5, alignItems: "center", justifyContent: "center" },
+  amountText: { fontSize: 18, fontFamily: "Inter_700Bold" },
+  donateSendBtn: { height: 54, borderRadius: 14, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, marginHorizontal: 24 },
+  donateSendText: { color: "#fff", fontSize: 16, fontFamily: "Inter_600SemiBold" },
+  cancelBtn: { height: 44, alignItems: "center", justifyContent: "center" },
+  cancelText: { fontSize: 14, fontFamily: "Inter_500Medium" },
 });
