@@ -216,7 +216,7 @@ export default function AdminScreen() {
   const { width } = useWindowDimensions();
   const { user, allUsers, logout } = useAuth();
   const { requests } = useHelp();
-  const { donations, totalRaised } = useDonations();
+  const { donations, totalItems } = useDonations();
   const { messages } = useChat();
 
   const [section, setSection] = useState<Section>("dashboard");
@@ -262,7 +262,7 @@ export default function AdminScreen() {
     { label: "Total Users", val: allUsers.length.toString(), icon: "user", iconBg: "#3B82F6", iconFg: "#fff", trend: "+12.5%", up: true },
     { label: "Active Requests", val: activeRequests.toString(), icon: "activity", iconBg: "#10B981", iconFg: "#fff", trend: "+8.3%", up: true },
     { label: "Completed", val: completedRequests.toString(), icon: "check-circle", iconBg: "#8B5CF6", iconFg: "#fff", trend: "+15.7%", up: true },
-    { label: "Donations Made", val: donations.length.toString(), icon: "gift", iconBg: "#F59E0B", iconFg: "#fff", trend: "+10.2%", up: true },
+    { label: "Items Donated", val: totalItems.toString(), icon: "gift", iconBg: "#F59E0B", iconFg: "#fff", trend: "+10.2%", up: true },
     { label: "Community Groups", val: "86", icon: "users", iconBg: "#EC4899", iconFg: "#fff", trend: "+6.4%", up: true },
     { label: "Pending Reports", val: PENDING_REPORTS.length.toString(), icon: "alert-circle", iconBg: "#EF4444", iconFg: "#fff", trend: "3.2%", up: false },
   ];
@@ -414,11 +414,11 @@ export default function AdminScreen() {
                     <Feather name="gift" size={16} color="#F59E0B" />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.donationTitle} numberOfLines={1}>{d.message ?? "Donation"}</Text>
+                    <Text style={styles.donationTitle} numberOfLines={1}>{d.quantity}× {d.itemType}</Text>
                     <Text style={styles.donationBy}>By {d.donorName}</Text>
                   </View>
                   <View style={{ alignItems: "flex-end" }}>
-                    <Text style={styles.donationAmt}>${d.amount}</Text>
+                    <Text style={styles.donationAmt}>{d.quantity} items</Text>
                     <Text style={styles.donationTime}>{timeAgo(d.createdAt)}</Text>
                   </View>
                 </View>
@@ -486,7 +486,7 @@ export default function AdminScreen() {
                     <Text style={{ fontSize: 10, color: BLUE_LIGHT, fontFamily: "Inter_500Medium" }}>{u.requestsCreated} requests</Text>
                     <Text style={{ fontSize: 10, color: "#14B8A6", fontFamily: "Inter_500Medium" }}>{u.helpOffered} helped</Text>
                     <Text style={{ fontSize: 10, color: "#F59E0B", fontFamily: "Inter_500Medium" }}>
-                      ${donations.filter((d) => d.donorId === u.id).reduce((s, d) => s + d.amount, 0)} donated
+                      {donations.filter((d) => d.donorId === u.id).reduce((s, d) => s + d.quantity, 0)} items donated
                     </Text>
                   </View>
                 </View>
@@ -532,27 +532,30 @@ export default function AdminScreen() {
 
         {section === "donations" && (
           <View style={{ padding: 14, gap: 10 }}>
-            <LinearGradient colors={["#F59E0B", "#D97706"]} style={[styles.donationBanner]}>
-              <Feather name="dollar-sign" size={28} color="#fff" />
+            <LinearGradient colors={["#14B8A6", "#0D9488"]} style={[styles.donationBanner]}>
+              <Feather name="gift" size={28} color="#fff" />
               <View>
-                <Text style={{ color: "#fff", fontSize: 28, fontFamily: "Inter_700Bold" }}>${totalRaised}</Text>
+                <Text style={{ color: "#fff", fontSize: 28, fontFamily: "Inter_700Bold" }}>{totalItems}</Text>
                 <Text style={{ color: "rgba(255,255,255,0.8)", fontSize: 12, fontFamily: "Inter_400Regular" }}>
-                  Total raised · {donations.length} donations
+                  Total items donated · {donations.length} contributions
                 </Text>
               </View>
             </LinearGradient>
             <Text style={styles.sectionHeader}>{donations.length} DONATIONS</Text>
             {donations.map((d) => (
               <View key={d.id} style={[styles.card, { flexDirection: "row", gap: 12, alignItems: "center" }]}>
-                <View style={[styles.donationIcon, { width: 52, height: 52, borderRadius: 14, backgroundColor: "#FFFBEB" }]}>
-                  <Feather name="gift" size={22} color="#F59E0B" />
+                <View style={[styles.donationIcon, { width: 52, height: 52, borderRadius: 14, backgroundColor: "#F0FDFA" }]}>
+                  <Feather name={(d.itemIcon ?? "gift") as any} size={22} color="#14B8A6" />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.donationTitle}>{d.donorName}</Text>
-                  <Text style={styles.donationBy}>{d.message ?? "No message"}</Text>
+                  <Text style={styles.donationBy}>{d.description ?? "No description"}</Text>
                   <Text style={styles.donationTime}>{timeAgo(d.createdAt)}</Text>
                 </View>
-                <Text style={[styles.donationAmt, { fontSize: 20 }]}>${d.amount}</Text>
+                <View style={{ alignItems: "flex-end", gap: 2 }}>
+                  <Text style={[styles.donationAmt, { fontSize: 16, color: "#14B8A6" }]}>{d.quantity}×</Text>
+                  <Text style={{ fontSize: 11, fontFamily: "Inter_600SemiBold", color: "#0D9488" }}>{d.itemType}</Text>
+                </View>
               </View>
             ))}
           </View>

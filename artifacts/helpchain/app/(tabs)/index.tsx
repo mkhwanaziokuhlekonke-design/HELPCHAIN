@@ -10,6 +10,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
   useWindowDimensions,
 } from "react-native";
@@ -133,7 +134,7 @@ const SYSTEM_SUMMARY = [
 function AdminDashboard() {
   const { allUsers } = useAuth();
   const { requests } = useHelp();
-  const { donations, totalRaised } = useDonations();
+  const { donations, totalItems } = useDonations();
   const { messages } = useChat();
   const router = useRouter();
   const { width } = useWindowDimensions();
@@ -252,11 +253,11 @@ function AdminDashboard() {
               <Feather name="gift" size={16} color="#F59E0B" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={adm.rowTitle}>{d.message ?? "Donation"}</Text>
+              <Text style={adm.rowTitle}>{d.quantity}× {d.itemType}</Text>
               <Text style={adm.rowSub}>By {d.donorName}</Text>
             </View>
             <View style={{ alignItems: "flex-end" }}>
-              <Text style={{ fontSize: 15, fontFamily: "Inter_700Bold", color: "#F59E0B" }}>${d.amount}</Text>
+              <Text style={{ fontSize: 15, fontFamily: "Inter_700Bold", color: "#14B8A6" }}>{d.quantity}× {d.itemType}</Text>
               <Text style={{ fontSize: 10, color: "#14B8A6", fontFamily: "Inter_400Regular" }}>{timeAgo(d.createdAt)}</Text>
             </View>
           </View>
@@ -310,7 +311,9 @@ export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [donateVisible, setDonateVisible] = useState(false);
-  const [selectedAmount, setSelectedAmount] = useState<number | null>(null);
+  const [selectedItem, setSelectedItem] = useState<{ type: string; icon: string } | null>(null);
+  const [selectedQty, setSelectedQty] = useState<number | null>(null);
+  const [donateNote, setDonateNote] = useState("");
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const bottomPad = Platform.OS === "web" ? 84 : insets.bottom + 50;
@@ -427,48 +430,119 @@ export default function HomeScreen() {
           <View style={styles.modalOverlay}>
             <View style={[styles.donateModal, { backgroundColor: colors.card }]}>
               <View style={styles.modalHandle} />
-              <LinearGradient colors={["#0EA5E9", "#2563EB"]} style={styles.modalHeader}>
+              <LinearGradient colors={["#14B8A6", "#0D9488"]} style={styles.modalHeader}>
                 <Image source={logo} style={styles.modalLogo} resizeMode="contain" />
-                <Text style={styles.modalTitle}>Donate to HelpChain</Text>
+                <Text style={styles.modalTitle}>Donate to Community</Text>
+                <Text style={[styles.modalSub, { color: "rgba(255,255,255,0.8)", paddingHorizontal: 0 }]}>
+                  Give food, clothes, books or other essentials
+                </Text>
               </LinearGradient>
-              <Text style={[styles.modalSub, { color: colors.mutedForeground }]}>
-                Your donation keeps HelpChain free for everyone who needs it.
-              </Text>
-              <View style={styles.amountGrid}>
-                {[5, 10, 25, 50].map((amt) => (
-                  <Pressable
-                    key={amt}
-                    onPress={() => setSelectedAmount(amt)}
-                    style={[
-                      styles.amountBtn,
-                      {
-                        borderColor: selectedAmount === amt ? colors.primary : colors.border,
-                        backgroundColor: selectedAmount === amt ? colors.secondary : colors.card,
-                      },
-                    ]}
-                  >
-                    <Text style={[styles.amountText, { color: selectedAmount === amt ? colors.primary : colors.foreground }]}>
-                      ${amt}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-              <Pressable
-                onPress={async () => {
-                  const amt = selectedAmount ?? 10;
-                  setDonateVisible(false);
-                  setSelectedAmount(null);
-                  if (user) await addDonation(user.id, user.name, amt);
-                  Alert.alert("Thank you!", `Your $${amt} donation has been recorded.\n\n(Demo — no real payment processed)`);
-                }}
-                style={[styles.donateSendBtn, { backgroundColor: colors.primary }]}
-              >
-                <Feather name="heart" size={18} color="#fff" />
-                <Text style={styles.donateSendText}>Donate {selectedAmount ? `$${selectedAmount}` : ""}</Text>
-              </Pressable>
-              <Pressable onPress={() => { setDonateVisible(false); setSelectedAmount(null); }} style={styles.cancelBtn}>
-                <Text style={[styles.cancelText, { color: colors.mutedForeground }]}>Cancel</Text>
-              </Pressable>
+
+              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 16, paddingHorizontal: 20, paddingBottom: 12 }}>
+                {/* Category picker */}
+                <Text style={[styles.donateLabel, { color: colors.foreground }]}>What would you like to donate?</Text>
+                <View style={styles.itemGrid}>
+                  {[
+                    { type: "Food", icon: "shopping-bag" },
+                    { type: "Clothes", icon: "tag" },
+                    { type: "Books", icon: "book-open" },
+                    { type: "Medicine", icon: "heart" },
+                    { type: "Electronics", icon: "monitor" },
+                    { type: "Other", icon: "package" },
+                  ].map((item) => {
+                    const active = selectedItem?.type === item.type;
+                    return (
+                      <Pressable
+                        key={item.type}
+                        onPress={() => setSelectedItem(item)}
+                        style={[
+                          styles.itemBtn,
+                          {
+                            borderColor: active ? "#14B8A6" : colors.border,
+                            backgroundColor: active ? "#F0FDFA" : colors.card,
+                          },
+                        ]}
+                      >
+                        <View style={[styles.itemIconCircle, { backgroundColor: active ? "#14B8A6" : "#F1F5F9" }]}>
+                          <Feather name={item.icon as any} size={20} color={active ? "#fff" : "#64748B"} />
+                        </View>
+                        <Text style={[styles.itemLabel, { color: active ? "#0D9488" : colors.foreground }]}>{item.type}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
+                {/* Quantity picker */}
+                <Text style={[styles.donateLabel, { color: colors.foreground }]}>How many / how much?</Text>
+                <View style={styles.qtyRow}>
+                  {[1, 2, 5, 10].map((q) => {
+                    const active = selectedQty === q;
+                    return (
+                      <Pressable
+                        key={q}
+                        onPress={() => setSelectedQty(q)}
+                        style={[
+                          styles.qtyBtn,
+                          {
+                            borderColor: active ? "#14B8A6" : colors.border,
+                            backgroundColor: active ? "#F0FDFA" : colors.card,
+                          },
+                        ]}
+                      >
+                        <Text style={[styles.qtyText, { color: active ? "#0D9488" : colors.foreground }]}>{q}{q === 10 ? "+" : ""}</Text>
+                        <Text style={[styles.qtyUnit, { color: colors.mutedForeground }]}>item{q !== 1 ? "s" : ""}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
+                {/* Note */}
+                <Text style={[styles.donateLabel, { color: colors.foreground }]}>Add a note <Text style={{ color: colors.mutedForeground, fontFamily: "Inter_400Regular" }}>(optional)</Text></Text>
+                <TextInput
+                  value={donateNote}
+                  onChangeText={setDonateNote}
+                  placeholder="e.g. Winter jackets, size M and L..."
+                  placeholderTextColor={colors.mutedForeground}
+                  multiline
+                  numberOfLines={2}
+                  style={[styles.noteInput, { borderColor: colors.border, color: colors.foreground, backgroundColor: colors.background }]}
+                />
+
+                {/* Submit */}
+                <Pressable
+                  onPress={async () => {
+                    if (!selectedItem) {
+                      Alert.alert("Select an item", "Please choose what you'd like to donate.");
+                      return;
+                    }
+                    const qty = selectedQty ?? 1;
+                    setDonateVisible(false);
+                    setSelectedItem(null);
+                    setSelectedQty(null);
+                    setDonateNote("");
+                    if (user) {
+                      await addDonation(user.id, user.name, selectedItem.type, selectedItem.icon, qty, donateNote || undefined);
+                    }
+                    Alert.alert(
+                      "Thank you! 🙏",
+                      `Your donation of ${qty} ${selectedItem.type} item${qty !== 1 ? "s" : ""} has been registered. Our team will contact you for pickup.`
+                    );
+                  }}
+                  style={[styles.donateSendBtn, { backgroundColor: "#14B8A6" }]}
+                >
+                  <Feather name="heart" size={18} color="#fff" />
+                  <Text style={styles.donateSendText}>
+                    Donate{selectedItem ? ` ${selectedQty ?? 1} ${selectedItem.type}` : ""}
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  onPress={() => { setDonateVisible(false); setSelectedItem(null); setSelectedQty(null); setDonateNote(""); }}
+                  style={styles.cancelBtn}
+                >
+                  <Text style={[styles.cancelText, { color: colors.mutedForeground }]}>Cancel</Text>
+                </Pressable>
+              </ScrollView>
             </View>
           </View>
         </Modal>
@@ -564,8 +638,41 @@ const styles = StyleSheet.create({
   amountGrid: { flexDirection: "row", gap: 10, flexWrap: "wrap", paddingHorizontal: 24 },
   amountBtn: { flex: 1, minWidth: "40%", height: 52, borderRadius: 12, borderWidth: 1.5, alignItems: "center", justifyContent: "center" },
   amountText: { fontSize: 18, fontFamily: "Inter_700Bold" },
-  donateSendBtn: { height: 54, borderRadius: 14, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, marginHorizontal: 24 },
+  donateSendBtn: { height: 54, borderRadius: 14, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10 },
   donateSendText: { color: "#fff", fontSize: 16, fontFamily: "Inter_600SemiBold" },
   cancelBtn: { height: 44, alignItems: "center", justifyContent: "center" },
   cancelText: { fontSize: 14, fontFamily: "Inter_500Medium" },
+  donateLabel: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
+  itemGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  itemBtn: {
+    width: "30%",
+    flexGrow: 1,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    alignItems: "center",
+    paddingVertical: 14,
+    gap: 8,
+  },
+  itemIconCircle: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
+  itemLabel: { fontSize: 12, fontFamily: "Inter_600SemiBold", textAlign: "center" },
+  qtyRow: { flexDirection: "row", gap: 10 },
+  qtyBtn: {
+    flex: 1,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    alignItems: "center",
+    paddingVertical: 12,
+    gap: 2,
+  },
+  qtyText: { fontSize: 18, fontFamily: "Inter_700Bold" },
+  qtyUnit: { fontSize: 10, fontFamily: "Inter_400Regular" },
+  noteInput: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    minHeight: 60,
+    textAlignVertical: "top",
+  },
 });
