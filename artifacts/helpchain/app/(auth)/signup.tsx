@@ -44,40 +44,91 @@ export default function SignupScreen() {
       return;
     }
     setLoading(true);
-    const success = await signup(name.trim(), email.trim(), phone.trim(), password);
+    const success = await signup(
+      name.trim(),
+      email.trim(),
+      phone.trim(),
+      password,
+    );
     setLoading(false);
     if (success) {
       router.replace("/(auth)/location" as any);
     } else {
-      Alert.alert("Sign Up Failed", "An account with this email already exists.");
+      Alert.alert(
+        "Sign Up Failed",
+        "An account with this email already exists.",
+      );
     }
   }
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.background }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-      <LinearGradient colors={["#1F2937", "#14B8A6"]} style={[styles.header, { paddingTop: topPad + 20 }]}>
+    <KeyboardAvoidingView
+      style={{ flex: 1, backgroundColor: colors.background }}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
+      <LinearGradient
+        colors={["#1F2937", "#14B8A6"]}
+        style={[styles.header, { paddingTop: topPad + 20 }]}
+      >
         <Pressable onPress={() => router.back()} style={styles.backBtn}>
           <Feather name="arrow-left" size={22} color="#fff" />
         </Pressable>
         <View style={styles.logoRow}>
-          <Feather name="shield" size={32} color="#fff" />
+          <HelpChainLogo width={60} />
           <Text style={styles.logoText}>HelpChain</Text>
         </View>
         <Text style={styles.headerSub}>Join your community today</Text>
       </LinearGradient>
 
-      <ScrollView contentContainerStyle={[styles.form, { paddingBottom: bottomPad + 24 }]} keyboardShouldPersistTaps="handled">
-        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Create Account</Text>
+      <ScrollView
+        contentContainerStyle={[styles.form, { paddingBottom: bottomPad + 24 }]}
+        keyboardShouldPersistTaps="handled"
+      >
+        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
+          Create Account
+        </Text>
 
         {[
-          { label: "Full Name", icon: "user", value: name, setter: setName, placeholder: "Your full name", keyboard: "default" as const },
-          { label: "Email", icon: "mail", value: email, setter: setEmail, placeholder: "you@example.com", keyboard: "email-address" as const },
-          { label: "Phone Number", icon: "phone", value: phone, setter: setPhone, placeholder: "+1 555 000 0000", keyboard: "phone-pad" as const },
+          {
+            label: "Full Name",
+            icon: "user",
+            value: name,
+            setter: setName,
+            placeholder: "Your full name",
+            keyboard: "default" as const,
+          },
+          {
+            label: "Email",
+            icon: "mail",
+            value: email,
+            setter: setEmail,
+            placeholder: "you@example.com",
+            keyboard: "email-address" as const,
+          },
+          {
+            label: "Phone Number",
+            icon: "phone",
+            value: phone,
+            setter: setPhone,
+            placeholder: "+1 555 000 0000",
+            keyboard: "phone-pad" as const,
+          },
         ].map((field) => (
           <View key={field.label} style={styles.inputGroup}>
-            <Text style={[styles.label, { color: colors.mutedForeground }]}>{field.label}</Text>
-            <View style={[styles.inputWrapper, { borderColor: colors.border, backgroundColor: colors.card }]}>
-              <Feather name={field.icon as any} size={16} color={colors.mutedForeground} />
+            <Text style={[styles.label, { color: colors.mutedForeground }]}>
+              {field.label}
+            </Text>
+            <View
+              style={[
+                styles.inputWrapper,
+                { borderColor: colors.border, backgroundColor: colors.card },
+              ]}
+            >
+              <Feather
+                name={field.icon as any}
+                size={16}
+                color={colors.mutedForeground}
+              />
               <TextInput
                 style={[styles.input, { color: colors.foreground }]}
                 placeholder={field.placeholder}
@@ -93,8 +144,15 @@ export default function SignupScreen() {
         ))}
 
         <View style={styles.inputGroup}>
-          <Text style={[styles.label, { color: colors.mutedForeground }]}>Password</Text>
-          <View style={[styles.inputWrapper, { borderColor: colors.border, backgroundColor: colors.card }]}>
+          <Text style={[styles.label, { color: colors.mutedForeground }]}>
+            Password
+          </Text>
+          <View
+            style={[
+              styles.inputWrapper,
+              { borderColor: colors.border, backgroundColor: colors.card },
+            ]}
+          >
             <Feather name="lock" size={16} color={colors.mutedForeground} />
             <TextInput
               style={[styles.input, { color: colors.foreground }]}
@@ -105,7 +163,11 @@ export default function SignupScreen() {
               secureTextEntry={!showPass}
             />
             <Pressable onPress={() => setShowPass(!showPass)}>
-              <Feather name={showPass ? "eye-off" : "eye"} size={16} color={colors.mutedForeground} />
+              <Feather
+                name={showPass ? "eye-off" : "eye"}
+                size={16}
+                color={colors.mutedForeground}
+              />
             </Pressable>
           </View>
         </View>
@@ -113,7 +175,13 @@ export default function SignupScreen() {
         <Pressable
           onPress={handleSignup}
           disabled={loading}
-          style={({ pressed }) => [styles.button, { backgroundColor: colors.accent, opacity: pressed || loading ? 0.85 : 1 }]}
+          style={({ pressed }) => [
+            styles.button,
+            {
+              backgroundColor: colors.accent,
+              opacity: pressed || loading ? 0.85 : 1,
+            },
+          ]}
         >
           {loading ? (
             <ActivityIndicator color="#fff" />
@@ -123,9 +191,13 @@ export default function SignupScreen() {
         </Pressable>
 
         <View style={styles.switchRow}>
-          <Text style={[styles.switchText, { color: colors.mutedForeground }]}>Already have an account? </Text>
+          <Text style={[styles.switchText, { color: colors.mutedForeground }]}>
+            Already have an account?{" "}
+          </Text>
           <Pressable onPress={() => router.back()}>
-            <Text style={[styles.switchLink, { color: colors.primary }]}>Sign In</Text>
+            <Text style={[styles.switchLink, { color: colors.primary }]}>
+              Sign In
+            </Text>
           </Pressable>
         </View>
       </ScrollView>

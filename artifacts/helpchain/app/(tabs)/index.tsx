@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { UserAvatar } from "@/components/UserAvatar";
 import { LiveLocationMap } from "@/components/LiveLocationMap";
 import { useAuth } from "@/context/AuthContext";
+import { useDonations } from "@/context/DonationContext";
 import { useColors } from "@/hooks/useColors";
 
 const logo = require("@/assets/images/logo.jpeg");
@@ -25,6 +26,7 @@ const logo = require("@/assets/images/logo.jpeg");
 export default function HomeScreen() {
   const colors = useColors();
   const { user } = useAuth();
+  const { addDonation } = useDonations();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [donateVisible, setDonateVisible] = useState(false);
@@ -176,10 +178,14 @@ export default function HomeScreen() {
             </View>
 
             <Pressable
-              onPress={() => {
+              onPress={async () => {
+                const amt = selectedAmount ?? 10;
                 setDonateVisible(false);
                 setSelectedAmount(null);
-                Alert.alert("Thank you!", `Your $${selectedAmount ?? 10} donation helps keep HelpChain free.\n\n(Demo — no real payment processed)`);
+                if (user) {
+                  await addDonation(user.id, user.name, amt);
+                }
+                Alert.alert("Thank you!", `Your $${amt} donation has been recorded.\n\n(Demo — no real payment processed)`);
               }}
               style={[styles.donateSendBtn, { backgroundColor: colors.primary }]}
             >
