@@ -34,8 +34,8 @@ interface AuthContextType {
   allUsers: User[];
   loading: boolean;
   locationGranted: boolean;
-  login: (email: string, password: string) => Promise<boolean>;
-  signup: (name: string, email: string, phone: string, password: string) => Promise<boolean>;
+  login: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
+  signup: (name: string, email: string, phone: string, password: string) => Promise<{ ok: boolean; error?: string }>;
   logout: () => Promise<void>;
   setLocationGranted: (val: boolean) => void;
   updateUserStats: (userId: string, field: "requestsCreated" | "helpOffered") => void;
@@ -89,15 +89,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  async function login(email: string, password: string): Promise<boolean> {
+  async function login(email: string, password: string): Promise<{ ok: boolean; error?: string }> {
     try {
       const cred = await signInWithEmailAndPassword(auth, email, password);
       const profile = await loadUserProfile(cred.user.uid);
       if (profile) {
         setUser(profile);
-        return true;
+        return { ok: true };
       }
-      // Profile missing — create it
+      // Profile missing — create it from Firebase Auth data
       const isAdmin = ADMIN_EMAILS.includes(email.toLowerCase());
       const newProfile: Omit<User, "id"> = {
         name: email.split("@")[0],
@@ -110,9 +110,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       };
       await setDoc(doc(db, "users", cred.user.uid), newProfile);
       setUser({ id: cred.user.uid, ...newProfile });
-      return true;
-    } catch {
-      return false;
+      return { ok: true };
+    } catch (e: any) {
+      const code: string = e?.code ?? "";
+      if (code === "auth/user-not-found" || code === "auth/wrong-password" || code === "auth/invalid-credential") {
+        return { ok: false, error: "Incorrect email or password." };
+      }
+      if (code === "auth/invalid-email") {
+        return { ok: false, error: "Please enter a valid email address." };
+      }
+      if (code === "auth/too-many-requests") {
+        return { ok: false, error: "Too many attempts. Please try again later." };
+      }
+      return { ok: false, error: "Login failed. Please check your connection and try again." };
     }
   }
 
@@ -121,7 +131,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     email: string,
     phone: string,
     password: string
-  ): Promise<boolean> {
+  ): Promise<{ ok: boolean; error?: string }> {
     try {
       const cred = await createUserWithEmailAndPassword(auth, email, password);
       const isAdmin = ADMIN_EMAILS.includes(email.toLowerCase());
@@ -139,9 +149,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         createdAtServer: serverTimestamp(),
       });
       setUser({ id: cred.user.uid, ...profile });
-      return true;
-    } catch {
-      return false;
+      return { ok: true };
+    } catch (e: any) {
+      const code: string = e?.code ?? "";
+      if (code === "auth/email-already-in-use") {
+        return { ok: false, error: "An account with this email already exists. Please sign in instead." };
+      }
+      if (code === "auth/invalid-email") {
+        return { ok: false, error: "Please enter a valid email address." };
+      }
+      if (code === "auth/weak-password") {
+        return { ok: false, error: "Password is too weak. Please use at least 8 characters with a mix of letters, numbers, and symbols." };
+      }
+      return { ok: false, error: "Sign up failed. Please check your connection and try again." };
     }
   }
 

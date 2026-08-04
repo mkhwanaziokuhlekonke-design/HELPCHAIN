@@ -41,10 +41,11 @@ export default function AdminLoginScreen() {
       return;
     }
     setLoading(true);
-    const success = await login(email.trim(), password);
+    const result = await login(email.trim(), password);
     setLoading(false);
 
-    if (success) {
+    if (result.ok) {
+      // Check isAdmin from the Firestore profile (loaded into allUsers via onSnapshot)
       const loggedIn = allUsers.find(
         (u) => u.email.toLowerCase() === email.trim().toLowerCase()
       );
@@ -57,7 +58,7 @@ export default function AdminLoginScreen() {
       }
       router.replace("/(tabs)" as any);
     } else {
-      Alert.alert("Access Denied", "Invalid admin credentials.");
+      Alert.alert("Access Denied", result.error ?? "Invalid admin credentials.");
     }
   }
 
@@ -133,13 +134,6 @@ export default function AdminLoginScreen() {
               <Feather name={showPass ? "eye-off" : "eye"} size={16} color={colors.mutedForeground} />
             </Pressable>
           </View>
-        </View>
-
-        <View style={[styles.demoHint, { backgroundColor: "#F0FDFA", borderColor: "#14B8A6" }]}>
-          <Feather name="info" size={13} color="#14B8A6" />
-          <Text style={{ color: "#0F766E", fontSize: 12, fontFamily: "Inter_400Regular" }}>
-            Demo admin: admin@helpchain.com / admin123
-          </Text>
         </View>
 
         <Pressable
