@@ -72,16 +72,21 @@ export default function UserLoginScreen() {
       return;
     }
     setLoading(true);
-    const result = await login(email.trim(), password);
-    setLoading(false);
-    if (result.ok) {
-      if (!locationGranted) {
-        router.replace("/(auth)/location" as any);
+    try {
+      const result = await login(email.trim(), password);
+      if (result.ok) {
+        if (!locationGranted) {
+          router.replace("/(auth)/location" as any);
+        } else {
+          router.replace("/(tabs)" as any);
+        }
       } else {
-        router.replace("/(tabs)" as any);
+        Alert.alert("Login Failed", result.error ?? "Invalid email or password.");
       }
-    } else {
-      Alert.alert("Login Failed", result.error ?? "Invalid email or password.");
+    } catch {
+      Alert.alert("Login Failed", "Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
     }
   }
 

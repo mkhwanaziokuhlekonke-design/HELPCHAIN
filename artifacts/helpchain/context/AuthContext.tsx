@@ -98,24 +98,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   async function login(email: string, password: string): Promise<{ ok: boolean; error?: string }> {
     try {
       const cred = await signInWithEmailAndPassword(auth, email, password);
-      const profile = await loadUserProfile(cred.user.uid);
-      if (profile) {
-        setUser(profile);
-        return { ok: true };
-      }
-      // Profile missing — create it from Firebase Auth data
-      const isAdmin = ADMIN_EMAILS.includes(email.toLowerCase());
-      const newProfile: Omit<User, "id"> = {
-        name: email.split("@")[0],
-        email: email.toLowerCase(),
-        phone: "",
-        isAdmin,
-        createdAt: new Date().toISOString(),
-        requestsCreated: 0,
-        helpOffered: 0,
-      };
-      await setDoc(doc(db, "users", cred.user.uid), newProfile);
-      setUser({ id: cred.user.uid, ...newProfile });
+
+      // Try to load the Firestore profile, but don't block on it.
+      // If it's missing or slow, onAuthStateChanged will set it in the background.
+      const profile = await Promise.race([
+        loadUserProfile(cred.user.uid),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 4000)),
+      ]);
+      if (profile) setUser(profile);
+
       return { ok: true };
     } catch (e: any) {
       const code: string = e?.code ?? "";
