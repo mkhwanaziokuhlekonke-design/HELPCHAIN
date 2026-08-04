@@ -1,12 +1,28 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import {
+  User as FirebaseUser,
+  createUserWithEmailAndPassword,
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signOut,
+} from "firebase/auth";
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  onSnapshot,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
+} from "firebase/firestore";
 import React, { createContext, useContext, useEffect, useState } from "react";
+import { auth, db } from "@/lib/firebase";
 
 export interface User {
   id: string;
   name: string;
   email: string;
   phone: string;
-  password: string;
   isAdmin: boolean;
   createdAt: string;
   requestsCreated: number;
@@ -27,45 +43,7 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-const USERS_KEY = "@helpchain_users";
-const CURRENT_USER_KEY = "@helpchain_current_user";
-const LOCATION_KEY = "@helpchain_location_granted";
-
-const SEED_USERS: User[] = [
-  {
-    id: "u0",
-    name: "Admin User",
-    email: "admin@helpchain.com",
-    phone: "+1 555 000 0000",
-    password: "admin123",
-    isAdmin: true,
-    createdAt: new Date(Date.now() - 30 * 86400000).toISOString(),
-    requestsCreated: 2,
-    helpOffered: 5,
-  },
-  {
-    id: "u1",
-    name: "John Smith",
-    email: "john@example.com",
-    phone: "+1 555 123 4567",
-    password: "password123",
-    isAdmin: false,
-    createdAt: new Date(Date.now() - 10 * 86400000).toISOString(),
-    requestsCreated: 3,
-    helpOffered: 2,
-  },
-  {
-    id: "u2",
-    name: "Jane Doe",
-    email: "jane@example.com",
-    phone: "+1 555 987 6543",
-    password: "password123",
-    isAdmin: false,
-    createdAt: new Date(Date.now() - 5 * 86400000).toISOString(),
-    requestsCreated: 1,
-    helpOffered: 4,
-  },
-];
+const ADMIN_EMAILS = ["admin@helpchain.com"];
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -73,100 +51,141 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [locationGranted, setLocationGrantedState] = useState(false);
 
+  // Listen to auth state changes and load Firestore profile
   useEffect(() => {
-    initAuth();
+    const unsubAuth = onAuthStateChanged(auth, async (fbUser: FirebaseUser | null) => {
+      if (fbUser) {
+        const profile = await loadUserProfile(fbUser.uid);
+        setUser(profile);
+      } else {
+        setUser(null);
+      }
+      setLoading(false);
+    });
+    return () => unsubAuth();
   }, []);
 
-  async function initAuth() {
-    try {
-      const storedUsers = await AsyncStorage.getItem(USERS_KEY);
-      let users: User[] = storedUsers ? JSON.parse(storedUsers) : [];
-      if (users.length === 0) {
-        users = SEED_USERS;
-        await AsyncStorage.setItem(USERS_KEY, JSON.stringify(users));
-      }
+  // Listen to all users (for admin panel)
+  useEffect(() => {
+    const unsubUsers = onSnapshot(collection(db, "users"), (snap) => {
+      const users: User[] = snap.docs.map((d) => ({
+        id: d.id,
+        ...(d.data() as Omit<User, "id">),
+      }));
       setAllUsers(users);
+    });
+    return () => unsubUsers();
+  }, []);
 
-      const currentUserId = await AsyncStorage.getItem(CURRENT_USER_KEY);
-      if (currentUserId) {
-        const found = users.find((u) => u.id === currentUserId);
-        if (found) setUser(found);
+  async function loadUserProfile(uid: string): Promise<User | null> {
+    try {
+      const snap = await getDoc(doc(db, "users", uid));
+      if (snap.exists()) {
+        return { id: snap.id, ...(snap.data() as Omit<User, "id">) };
       }
-
-      const locGranted = await AsyncStorage.getItem(LOCATION_KEY);
-      if (locGranted === "true") setLocationGrantedState(true);
-    } catch (e) {
-      console.error("Auth init error", e);
-    } finally {
-      setLoading(false);
+      return null;
+    } catch {
+      return null;
     }
   }
 
   async function login(email: string, password: string): Promise<boolean> {
-    const storedUsers = await AsyncStorage.getItem(USERS_KEY);
-    const users: User[] = storedUsers ? JSON.parse(storedUsers) : SEED_USERS;
-    const found = users.find(
-      (u) => u.email.toLowerCase() === email.toLowerCase() && u.password === password
-    );
-    if (found) {
-      setUser(found);
-      setAllUsers(users);
-      await AsyncStorage.setItem(CURRENT_USER_KEY, found.id);
+    try {
+      const cred = await signInWithEmailAndPassword(auth, email, password);
+      const profile = await loadUserProfile(cred.user.uid);
+      if (profile) {
+        setUser(profile);
+        return true;
+      }
+      // Profile missing — create it
+      const isAdmin = ADMIN_EMAILS.includes(email.toLowerCase());
+      const newProfile: Omit<User, "id"> = {
+        name: email.split("@")[0],
+        email: email.toLowerCase(),
+        phone: "",
+        isAdmin,
+        createdAt: new Date().toISOString(),
+        requestsCreated: 0,
+        helpOffered: 0,
+      };
+      await setDoc(doc(db, "users", cred.user.uid), newProfile);
+      setUser({ id: cred.user.uid, ...newProfile });
       return true;
+    } catch {
+      return false;
     }
-    return false;
   }
 
-  async function signup(name: string, email: string, phone: string, password: string): Promise<boolean> {
-    const storedUsers = await AsyncStorage.getItem(USERS_KEY);
-    const users: User[] = storedUsers ? JSON.parse(storedUsers) : SEED_USERS;
-    const exists = users.find((u) => u.email.toLowerCase() === email.toLowerCase());
-    if (exists) return false;
-    const newUser: User = {
-      id: "u" + Date.now(),
-      name,
-      email,
-      phone,
-      password,
-      isAdmin: false,
-      createdAt: new Date().toISOString(),
-      requestsCreated: 0,
-      helpOffered: 0,
-    };
-    const updated = [...users, newUser];
-    await AsyncStorage.setItem(USERS_KEY, JSON.stringify(updated));
-    setAllUsers(updated);
-    setUser(newUser);
-    await AsyncStorage.setItem(CURRENT_USER_KEY, newUser.id);
-    return true;
+  async function signup(
+    name: string,
+    email: string,
+    phone: string,
+    password: string
+  ): Promise<boolean> {
+    try {
+      const cred = await createUserWithEmailAndPassword(auth, email, password);
+      const isAdmin = ADMIN_EMAILS.includes(email.toLowerCase());
+      const profile: Omit<User, "id"> = {
+        name,
+        email: email.toLowerCase(),
+        phone,
+        isAdmin,
+        createdAt: new Date().toISOString(),
+        requestsCreated: 0,
+        helpOffered: 0,
+      };
+      await setDoc(doc(db, "users", cred.user.uid), {
+        ...profile,
+        createdAtServer: serverTimestamp(),
+      });
+      setUser({ id: cred.user.uid, ...profile });
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   async function logout() {
+    await signOut(auth);
     setUser(null);
-    await AsyncStorage.removeItem(CURRENT_USER_KEY);
   }
 
-  async function setLocationGranted(val: boolean) {
+  function setLocationGranted(val: boolean) {
     setLocationGrantedState(val);
-    await AsyncStorage.setItem(LOCATION_KEY, val ? "true" : "false");
   }
 
-  async function updateUserStats(userId: string, field: "requestsCreated" | "helpOffered") {
-    const storedUsers = await AsyncStorage.getItem(USERS_KEY);
-    const users: User[] = storedUsers ? JSON.parse(storedUsers) : [];
-    const updated = users.map((u) =>
-      u.id === userId ? { ...u, [field]: u[field] + 1 } : u
-    );
-    await AsyncStorage.setItem(USERS_KEY, JSON.stringify(updated));
-    setAllUsers(updated);
-    if (user?.id === userId) {
-      setUser((prev) => prev ? { ...prev, [field]: prev[field] + 1 } : prev);
+  async function updateUserStats(
+    userId: string,
+    field: "requestsCreated" | "helpOffered"
+  ) {
+    try {
+      const ref = doc(db, "users", userId);
+      const snap = await getDoc(ref);
+      if (snap.exists()) {
+        const current = (snap.data() as User)[field] ?? 0;
+        await updateDoc(ref, { [field]: current + 1 });
+        if (user?.id === userId) {
+          setUser((prev) => prev ? { ...prev, [field]: current + 1 } : prev);
+        }
+      }
+    } catch (e) {
+      console.error("updateUserStats error", e);
     }
   }
 
   return (
     <AuthContext.Provider
-      value={{ user, allUsers, loading, locationGranted, login, signup, logout, setLocationGranted, updateUserStats }}
+      value={{
+        user,
+        allUsers,
+        loading,
+        locationGranted,
+        login,
+        signup,
+        logout,
+        setLocationGranted,
+        updateUserStats,
+      }}
     >
       {children}
     </AuthContext.Provider>

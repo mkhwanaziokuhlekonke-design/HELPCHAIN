@@ -1,5 +1,13 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import {
+  addDoc,
+  collection,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+} from "firebase/firestore";
 import React, { createContext, useContext, useEffect, useState } from "react";
+import { db } from "@/lib/firebase";
 
 export interface Donation {
   id: string;
@@ -26,68 +34,20 @@ interface DonationContextType {
 }
 
 const DonationContext = createContext<DonationContextType | null>(null);
-const DONATIONS_KEY = "@helpchain_donations_v2";
-
-const SEED_DONATIONS: Donation[] = [
-  {
-    id: "d1",
-    donorId: "u1",
-    donorName: "John Smith",
-    itemType: "Food",
-    itemIcon: "shopping-bag",
-    quantity: 5,
-    description: "Rice, lentils and canned goods",
-    createdAt: new Date(Date.now() - 3 * 86400000).toISOString(),
-  },
-  {
-    id: "d2",
-    donorId: "u2",
-    donorName: "Jane Doe",
-    itemType: "Clothes",
-    itemIcon: "tag",
-    quantity: 3,
-    description: "Winter jackets and children's clothes",
-    createdAt: new Date(Date.now() - 2 * 86400000).toISOString(),
-  },
-  {
-    id: "d3",
-    donorId: "u1",
-    donorName: "John Smith",
-    itemType: "Medicine",
-    itemIcon: "heart",
-    quantity: 10,
-    description: "First aid kits and vitamins",
-    createdAt: new Date(Date.now() - 86400000).toISOString(),
-  },
-  {
-    id: "d4",
-    donorId: "u2",
-    donorName: "Jane Doe",
-    itemType: "Books",
-    itemIcon: "book-open",
-    quantity: 8,
-    description: "Children's books and school supplies",
-    createdAt: new Date(Date.now() - 3600000 * 4).toISOString(),
-  },
-];
 
 export function DonationProvider({ children }: { children: React.ReactNode }) {
   const [donations, setDonations] = useState<Donation[]>([]);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const stored = await AsyncStorage.getItem(DONATIONS_KEY);
-        if (stored) {
-          setDonations(JSON.parse(stored));
-        } else {
-          setDonations(SEED_DONATIONS);
-          await AsyncStorage.setItem(DONATIONS_KEY, JSON.stringify(SEED_DONATIONS));
-        }
-      } catch {
-        setDonations(SEED_DONATIONS);
-      }
-    })();
+    const q = query(collection(db, "donations"), orderBy("createdAt", "desc"));
+    const unsub = onSnapshot(q, (snap) => {
+      const items: Donation[] = snap.docs.map((d) => ({
+        id: d.id,
+        ...(d.data() as Omit<Donation, "id">),
+      }));
+      setDonations(items);
+    });
+    return () => unsub();
   }, []);
 
   async function addDonation(
@@ -98,19 +58,16 @@ export function DonationProvider({ children }: { children: React.ReactNode }) {
     quantity: number,
     description?: string
   ) {
-    const donation: Donation = {
-      id: "d" + Date.now(),
+    await addDoc(collection(db, "donations"), {
       donorId,
       donorName,
       itemType,
       itemIcon,
       quantity,
-      description,
+      description: description ?? "",
       createdAt: new Date().toISOString(),
-    };
-    const updated = [donation, ...donations];
-    setDonations(updated);
-    await AsyncStorage.setItem(DONATIONS_KEY, JSON.stringify(updated));
+      _serverTs: serverTimestamp(),
+    });
   }
 
   const totalItems = donations.reduce((sum, d) => sum + d.quantity, 0);
