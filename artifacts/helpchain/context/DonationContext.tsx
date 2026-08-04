@@ -40,13 +40,17 @@ export function DonationProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const q = query(collection(db, "donations"), orderBy("createdAt", "desc"));
-    const unsub = onSnapshot(q, (snap) => {
-      const items: Donation[] = snap.docs.map((d) => ({
-        id: d.id,
-        ...(d.data() as Omit<Donation, "id">),
-      }));
-      setDonations(items);
-    });
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const items: Donation[] = snap.docs.map((d) => ({
+          id: d.id,
+          ...(d.data() as Omit<Donation, "id">),
+        }));
+        setDonations(items);
+      },
+      (err) => console.warn("[DonationContext] snapshot error:", err.code)
+    );
     return () => unsub();
   }, []);
 
@@ -58,16 +62,21 @@ export function DonationProvider({ children }: { children: React.ReactNode }) {
     quantity: number,
     description?: string
   ) {
-    await addDoc(collection(db, "donations"), {
-      donorId,
-      donorName,
-      itemType,
-      itemIcon,
-      quantity,
-      description: description ?? "",
-      createdAt: new Date().toISOString(),
-      _serverTs: serverTimestamp(),
-    });
+    try {
+      await addDoc(collection(db, "donations"), {
+        donorId,
+        donorName,
+        itemType,
+        itemIcon,
+        quantity,
+        description: description ?? "",
+        createdAt: new Date().toISOString(),
+        _serverTs: serverTimestamp(),
+      });
+    } catch (e: any) {
+      console.error("[DonationContext] addDonation failed:", e?.code, e?.message);
+      throw new Error(e?.message ?? "Failed to submit donation");
+    }
   }
 
   const totalItems = donations.reduce((sum, d) => sum + d.quantity, 0);

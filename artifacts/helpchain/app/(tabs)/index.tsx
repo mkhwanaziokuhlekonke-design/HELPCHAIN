@@ -347,7 +347,7 @@ export default function HomeScreen() {
       title: "Emergency",
       sub: "Get urgent help now",
       colors: ["#DC2626", "#B91C1C"] as [string, string],
-      onPress: () => tap(() => router.push("/request/new" as any)),
+      onPress: () => tap(() => router.push("/request/new?emergency=1" as any)),
     },
     {
       key: "chat",
@@ -515,18 +515,26 @@ export default function HomeScreen() {
                       Alert.alert("Select an item", "Please choose what you'd like to donate.");
                       return;
                     }
+                    if (!user) {
+                      Alert.alert("Not signed in", "Please sign in to donate.");
+                      return;
+                    }
                     const qty = selectedQty ?? 1;
+                    const itemSnapshot = { ...selectedItem };
+                    const noteSnapshot = donateNote;
                     setDonateVisible(false);
                     setSelectedItem(null);
                     setSelectedQty(null);
                     setDonateNote("");
-                    if (user) {
-                      await addDonation(user.id, user.name, selectedItem.type, selectedItem.icon, qty, donateNote || undefined);
+                    try {
+                      await addDonation(user.id, user.name, itemSnapshot.type, itemSnapshot.icon, qty, noteSnapshot || undefined);
+                      Alert.alert(
+                        "Thank you! 🙏",
+                        `Your donation of ${qty} ${itemSnapshot.type} item${qty !== 1 ? "s" : ""} has been registered. Our team will contact you for pickup.`
+                      );
+                    } catch {
+                      Alert.alert("Donation Failed", "Could not save your donation. Please check your connection and try again.");
                     }
-                    Alert.alert(
-                      "Thank you! 🙏",
-                      `Your donation of ${qty} ${selectedItem.type} item${qty !== 1 ? "s" : ""} has been registered. Our team will contact you for pickup.`
-                    );
                   }}
                   style={[styles.donateSendBtn, { backgroundColor: "#14B8A6" }]}
                 >

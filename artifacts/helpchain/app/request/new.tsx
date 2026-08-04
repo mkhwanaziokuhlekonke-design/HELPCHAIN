@@ -1,6 +1,6 @@
 import * as Location from "expo-location";
-import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -39,12 +39,18 @@ export default function NewRequestScreen() {
   const { addNotification } = useNotifications();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const params = useLocalSearchParams<{ emergency?: string }>();
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState<HelpCategory>("daily");
-  const [isEmergency, setIsEmergency] = useState(false);
+  const [isEmergency, setIsEmergency] = useState(params.emergency === "1");
   const [useLocation, setUseLocation] = useState(false);
+
+  // Sync category when emergency flag is set via URL param
+  useEffect(() => {
+    if (params.emergency === "1") setCategory("emergency");
+  }, []);
   const [locationData, setLocationData] = useState<{ latitude: number; longitude: number; address?: string } | null>(null);
   const [loadingLocation, setLoadingLocation] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -97,27 +103,38 @@ export default function NewRequestScreen() {
     setSubmitting(true);
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
-    const req = await addRequest({
-      title: title.trim(),
-      description: description.trim(),
-      category: isEmergency ? "emergency" : category,
-      isEmergency,
-      requesterId: user.id,
-      requesterName: user.name,
-      location: locationData ?? undefined,
-    });
-
-    if (isEmergency) {
-      await addNotification({
-        title: "Emergency Alert",
-        body: `${user.name} posted an emergency request: ${title}`,
-        type: "emergency_alert",
-        requestId: req.id,
+    try {
+      const req = await addRequest({
+        title: title.trim(),
+        description: description.trim(),
+        category: isEmergency ? "emergency" : category,
+        isEmergency,
+        requesterId: user.id,
+        requesterName: user.name,
+        location: locationData ?? undefined,
       });
-    }
 
-    setSubmitting(false);
-    router.back();
+      if (isEmergency) {
+        // Fire-and-forget — don't block navigation on notification write
+        addNotification({
+          title: "🚨 Emergency Alert",
+          body: `${user.name} needs urgent help: ${title.trim()}`,
+          type: "emergency_alert",
+          requestId: req.id,
+        }).catch(() => {});
+      }
+
+      router.back();
+    } catch (e: any) {
+      Alert.alert(
+        "Failed to Post",
+        e?.message?.includes("permission")
+          ? "Permission denied. Make sure Firestore rules are published in Firebase Console."
+          : "Could not post your request. Please check your connection and try again."
+      );
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (

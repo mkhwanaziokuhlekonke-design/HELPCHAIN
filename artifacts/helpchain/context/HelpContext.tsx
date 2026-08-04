@@ -79,8 +79,13 @@ export function HelpProvider({ children }: { children: React.ReactNode }) {
       updatedAt: now,
       _serverTs: serverTimestamp(),
     };
-    const ref = await addDoc(collection(db, "requests"), data);
-    return { id: ref.id, ...data };
+    try {
+      const ref = await addDoc(collection(db, "requests"), data);
+      return { id: ref.id, ...data };
+    } catch (e: any) {
+      console.error("[HelpContext] addRequest failed:", e?.code, e?.message);
+      throw new Error(e?.message ?? "Failed to post request");
+    }
   }
 
   async function offerHelp(requestId: string, helperId: string, helperName: string) {

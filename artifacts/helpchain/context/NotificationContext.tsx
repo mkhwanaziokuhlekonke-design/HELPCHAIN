@@ -1,5 +1,18 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import {
+  addDoc,
+  collection,
+  doc,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+  updateDoc,
+  where,
+  writeBatch,
+} from "firebase/firestore";
+import { onAuthStateChanged } from "firebase/auth";
 import React, { createContext, useContext, useEffect, useState } from "react";
+import { auth, db } from "@/lib/firebase";
 
 export type NotifType = "help_accepted" | "help_offered" | "emergency_alert" | "completed" | "system";
 
@@ -11,95 +24,106 @@ export interface AppNotification {
   read: boolean;
   requestId?: string;
   createdAt: string;
+  /** "all" = broadcast to every user; otherwise a specific uid */
+  targetUserId: string;
 }
 
 interface NotificationContextType {
   notifications: AppNotification[];
   unreadCount: number;
-  addNotification: (n: Omit<AppNotification, "id" | "read" | "createdAt">) => Promise<void>;
+  addNotification: (n: Omit<AppNotification, "id" | "read" | "createdAt" | "targetUserId"> & { targetUserId?: string }) => Promise<void>;
   markAllRead: () => Promise<void>;
   markRead: (id: string) => Promise<void>;
   clearAll: () => Promise<void>;
 }
 
 const NotificationContext = createContext<NotificationContextType | null>(null);
-const NOTIFS_KEY = "@helpchain_notifications";
-
-const SEED_NOTIFICATIONS: AppNotification[] = [
-  {
-    id: "n1",
-    title: "Emergency Alert",
-    body: "A new emergency help request was posted near your area.",
-    type: "emergency_alert",
-    read: false,
-    requestId: "r2",
-    createdAt: new Date(Date.now() - 15 * 60000).toISOString(),
-  },
-  {
-    id: "n2",
-    title: "Help Offer Accepted",
-    body: "John Smith accepted your transport request to the hospital.",
-    type: "help_accepted",
-    read: false,
-    requestId: "r3",
-    createdAt: new Date(Date.now() - 8 * 3600000).toISOString(),
-  },
-  {
-    id: "n3",
-    title: "Welcome to HelpChain!",
-    body: "You're now part of a community that helps each other. Start by browsing open requests or posting your own.",
-    type: "system",
-    read: true,
-    createdAt: new Date(Date.now() - 2 * 86400000).toISOString(),
-  },
-];
 
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [currentUid, setCurrentUid] = useState<string | null>(null);
 
+  // Track auth state so we know which user's notifications to load
   useEffect(() => {
-    loadNotifications();
+    const unsub = onAuthStateChanged(auth, (fbUser) => {
+      setCurrentUid(fbUser?.uid ?? null);
+    });
+    return () => unsub();
   }, []);
 
-  async function loadNotifications() {
+  // Subscribe to Firestore notifications for this user + broadcasts
+  useEffect(() => {
+    if (!currentUid) {
+      setNotifications([]);
+      return;
+    }
+
+    // Query: notifications targeted at this user OR broadcast to "all"
+    const q = query(
+      collection(db, "notifications"),
+      where("targetUserId", "in", [currentUid, "all"]),
+      orderBy("createdAt", "desc")
+    );
+
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const items: AppNotification[] = snap.docs.map((d) => ({
+          id: d.id,
+          ...(d.data() as Omit<AppNotification, "id">),
+        }));
+        setNotifications(items);
+      },
+      (err) => console.warn("[NotificationContext] snapshot error:", err.code)
+    );
+    return () => unsub();
+  }, [currentUid]);
+
+  async function addNotification(
+    n: Omit<AppNotification, "id" | "read" | "createdAt" | "targetUserId"> & { targetUserId?: string }
+  ) {
     try {
-      const stored = await AsyncStorage.getItem(NOTIFS_KEY);
-      if (stored) {
-        setNotifications(JSON.parse(stored));
-      } else {
-        setNotifications(SEED_NOTIFICATIONS);
-        await AsyncStorage.setItem(NOTIFS_KEY, JSON.stringify(SEED_NOTIFICATIONS));
-      }
-    } catch {
-      setNotifications(SEED_NOTIFICATIONS);
+      await addDoc(collection(db, "notifications"), {
+        ...n,
+        targetUserId: n.targetUserId ?? (n.type === "emergency_alert" ? "all" : currentUid ?? "all"),
+        read: false,
+        createdAt: new Date().toISOString(),
+        _serverTs: serverTimestamp(),
+      });
+    } catch (e: any) {
+      console.warn("[NotificationContext] addNotification failed:", e?.code);
     }
   }
 
-  async function save(updated: AppNotification[]) {
-    setNotifications(updated);
-    await AsyncStorage.setItem(NOTIFS_KEY, JSON.stringify(updated));
-  }
-
-  async function addNotification(n: Omit<AppNotification, "id" | "read" | "createdAt">) {
-    const newN: AppNotification = {
-      ...n,
-      id: "n" + Date.now(),
-      read: false,
-      createdAt: new Date().toISOString(),
-    };
-    await save([newN, ...notifications]);
-  }
-
   async function markRead(id: string) {
-    await save(notifications.map((n) => (n.id === id ? { ...n, read: true } : n)));
+    try {
+      await updateDoc(doc(db, "notifications", id), { read: true });
+    } catch (e: any) {
+      console.warn("[NotificationContext] markRead failed:", e?.code);
+    }
   }
 
   async function markAllRead() {
-    await save(notifications.map((n) => ({ ...n, read: true })));
+    const unread = notifications.filter((n) => !n.read);
+    if (!unread.length) return;
+    try {
+      const batch = writeBatch(db);
+      unread.forEach((n) => batch.update(doc(db, "notifications", n.id), { read: true }));
+      await batch.commit();
+    } catch (e: any) {
+      console.warn("[NotificationContext] markAllRead failed:", e?.code);
+    }
   }
 
   async function clearAll() {
-    await save([]);
+    if (!notifications.length) return;
+    try {
+      const batch = writeBatch(db);
+      notifications.forEach((n) => batch.delete(doc(db, "notifications", n.id)));
+      await batch.commit();
+    } catch (e: any) {
+      console.warn("[NotificationContext] clearAll failed:", e?.code);
+    }
   }
 
   const unreadCount = notifications.filter((n) => !n.read).length;
