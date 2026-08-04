@@ -65,15 +65,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => unsubAuth();
   }, []);
 
-  // Listen to all users (for admin panel)
+  // Listen to all users (for admin panel) — fail silently if rules block it
   useEffect(() => {
-    const unsubUsers = onSnapshot(collection(db, "users"), (snap) => {
-      const users: User[] = snap.docs.map((d) => ({
-        id: d.id,
-        ...(d.data() as Omit<User, "id">),
-      }));
-      setAllUsers(users);
-    });
+    const unsubUsers = onSnapshot(
+      collection(db, "users"),
+      (snap) => {
+        const users: User[] = snap.docs.map((d) => ({
+          id: d.id,
+          ...(d.data() as Omit<User, "id">),
+        }));
+        setAllUsers(users);
+      },
+      (err) => {
+        console.warn("[Firestore] allUsers listener error (check security rules):", err.code, err.message);
+      }
+    );
     return () => unsubUsers();
   }, []);
 
@@ -113,6 +119,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return { ok: true };
     } catch (e: any) {
       const code: string = e?.code ?? "";
+      console.error("[Auth] login error:", code, e?.message);
       if (code === "auth/user-not-found" || code === "auth/wrong-password" || code === "auth/invalid-credential") {
         return { ok: false, error: "Incorrect email or password." };
       }
@@ -122,7 +129,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (code === "auth/too-many-requests") {
         return { ok: false, error: "Too many attempts. Please try again later." };
       }
-      return { ok: false, error: "Login failed. Please check your connection and try again." };
+      if (code === "auth/operation-not-allowed") {
+        return { ok: false, error: "Email/Password sign-in is not enabled. Please enable it in Firebase Console → Authentication → Sign-in methods." };
+      }
+      if (code === "auth/network-request-failed") {
+        return { ok: false, error: "Network error. Please check your internet connection and try again." };
+      }
+      if (code === "auth/app-not-authorized" || code === "auth/invalid-api-key") {
+        return { ok: false, error: "Firebase configuration error. Please check your API keys." };
+      }
+      return { ok: false, error: `Login failed (${code || "unknown"}). Please check your connection and try again.` };
     }
   }
 
@@ -152,6 +168,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return { ok: true };
     } catch (e: any) {
       const code: string = e?.code ?? "";
+      console.error("[Auth] signup error:", code, e?.message);
       if (code === "auth/email-already-in-use") {
         return { ok: false, error: "An account with this email already exists. Please sign in instead." };
       }
@@ -161,7 +178,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (code === "auth/weak-password") {
         return { ok: false, error: "Password is too weak. Please use at least 8 characters with a mix of letters, numbers, and symbols." };
       }
-      return { ok: false, error: "Sign up failed. Please check your connection and try again." };
+      if (code === "auth/operation-not-allowed") {
+        return { ok: false, error: "Email/Password sign-in is not enabled. Go to Firebase Console → Authentication → Sign-in methods and enable Email/Password." };
+      }
+      if (code === "auth/network-request-failed") {
+        return { ok: false, error: "Network error. Please check your internet connection and try again." };
+      }
+      if (code === "auth/app-not-authorized" || code === "auth/invalid-api-key") {
+        return { ok: false, error: "Firebase configuration error. Please check your API keys." };
+      }
+      return { ok: false, error: `Sign up failed (${code || "unknown"}). Please check your connection and try again.` };
     }
   }
 
