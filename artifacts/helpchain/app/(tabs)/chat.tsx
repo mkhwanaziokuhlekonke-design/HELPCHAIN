@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
-  KeyboardAvoidingView,
   Platform,
   Pressable,
   StyleSheet,
@@ -11,6 +10,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -69,7 +69,10 @@ export default function ChatScreen() {
   const listRef = useRef<FlatList>(null);
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
-  const bottomPad = Platform.OS === "web" ? 8 : insets.bottom + 8;
+  // Tab bar is position:absolute on iOS/Android — must clear it manually.
+  // Standard tab bar height is 49px; add safe-area bottom for notched iPhones.
+  const TAB_BAR_HEIGHT = 49;
+  const bottomPad = Platform.OS === "web" ? 8 : TAB_BAR_HEIGHT + insets.bottom + 8;
 
   useEffect(() => {
     if (!loading && messages.length) {
@@ -104,8 +107,8 @@ export default function ChatScreen() {
   return (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: colors.background }}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? TAB_BAR_HEIGHT + insets.bottom : 0}
     >
       <LinearGradient colors={["#1F2937", "#0F4C75"]} style={[styles.header, { paddingTop: topPad }]}>
         <View style={styles.headerInner}>

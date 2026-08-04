@@ -1,6 +1,7 @@
 import { useRouter } from "expo-router";
 import React from "react";
 import {
+  ActivityIndicator,
   Alert,
   Platform,
   Pressable,
@@ -63,7 +64,13 @@ export default function ProfileScreen() {
     ]);
   }
 
-  if (!user) return null;
+  if (!user) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.background, alignItems: "center", justifyContent: "center" }}>
+        <ActivityIndicator color={colors.primary} size="large" />
+      </View>
+    );
+  }
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -96,8 +103,9 @@ export default function ProfileScreen() {
 
         <View style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           {[
-            { icon: "phone", label: "Phone", value: user.phone },
-            { icon: "calendar", label: "Member since", value: new Date(user.createdAt).toLocaleDateString() },
+            { icon: "mail", label: "Email", value: user.email },
+            { icon: "calendar", label: "Member since", value: new Date(user.createdAt).toLocaleDateString([], { year: "numeric", month: "long", day: "numeric" }) },
+            { icon: "map-pin", label: "Location", value: user.isAdmin ? "Admin" : "Community member" },
           ].map((row, i, arr) => (
             <View key={row.label} style={[styles.infoRow, { borderBottomColor: colors.border, borderBottomWidth: i < arr.length - 1 ? 1 : 0 }]}>
               <Feather name={row.icon as any} size={15} color={colors.primary} />
