@@ -135,8 +135,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (code === "auth/network-request-failed") {
         return { ok: false, error: "Network error. Please check your internet connection and try again." };
       }
-      if (code === "auth/app-not-authorized" || code === "auth/invalid-api-key") {
-        return { ok: false, error: "Firebase configuration error. Please check your API keys." };
+      if (code === "auth/app-not-authorized" || code === "auth/invalid-api-key" || code.includes("api-key-not-valid")) {
+        return { ok: false, error: "Invalid Firebase API key. Please re-enter the correct EXPO_PUBLIC_FIREBASE_API_KEY in Replit Secrets." };
       }
       return { ok: false, error: `Login failed (${code || "unknown"}). Please check your connection and try again.` };
     }
@@ -184,10 +184,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (code === "auth/network-request-failed") {
         return { ok: false, error: "Network error. Please check your internet connection and try again." };
       }
-      if (code === "auth/app-not-authorized" || code === "auth/invalid-api-key") {
-        return { ok: false, error: "Firebase configuration error. Please check your API keys." };
+      if (code === "auth/app-not-authorized" || code === "auth/invalid-api-key" || code.includes("api-key-not-valid")) {
+        return { ok: false, error: "Invalid Firebase API key. Update EXPO_PUBLIC_FIREBASE_API_KEY in Replit Secrets with the correct value from Firebase Console → Project Settings." };
       }
-      return { ok: false, error: `Sign up failed (${code || "unknown"}). Please check your connection and try again.` };
+      return { ok: false, error: `Sign up failed (${code || "unknown"}).` };
     }
   }
 
