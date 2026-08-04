@@ -52,7 +52,6 @@ export default function SignupScreen() {
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
   const [showRules, setShowRules] = useState(false);
@@ -63,7 +62,7 @@ export default function SignupScreen() {
   const strength = passwordStrength(password);
 
   async function handleSignup() {
-    if (!name.trim() || !email.trim() || !phone.trim() || !password.trim()) {
+    if (!name.trim() || !email.trim() || !password.trim()) {
       Alert.alert("Error", "Please fill in all fields.");
       return;
     }
@@ -75,7 +74,7 @@ export default function SignupScreen() {
       return;
     }
     setLoading(true);
-    const result = await signup(name.trim(), email.trim(), phone.trim(), password);
+    const result = await signup(name.trim(), email.trim(), password);
     setLoading(false);
     if (result.ok) {
       router.replace("/(auth)/location" as any);
@@ -111,7 +110,6 @@ export default function SignupScreen() {
         {[
           { label: "Full Name", icon: "user", value: name, setter: setName, placeholder: "Your full name", keyboard: "default" as const },
           { label: "Email", icon: "mail", value: email, setter: setEmail, placeholder: "you@example.com", keyboard: "email-address" as const },
-          { label: "Phone Number", icon: "phone", value: phone, setter: setPhone, placeholder: "+1 555 000 0000", keyboard: "phone-pad" as const },
         ].map((field) => (
           <View key={field.label} style={styles.inputGroup}>
             <Text style={[styles.label, { color: colors.mutedForeground }]}>{field.label}</Text>

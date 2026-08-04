@@ -35,7 +35,7 @@ interface AuthContextType {
   loading: boolean;
   locationGranted: boolean;
   login: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
-  signup: (name: string, email: string, phone: string, password: string) => Promise<{ ok: boolean; error?: string }>;
+  signup: (name: string, email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
   logout: () => Promise<void>;
   setLocationGranted: (val: boolean) => void;
   updateUserStats: (userId: string, field: "requestsCreated" | "helpOffered") => void;
@@ -145,7 +145,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   async function signup(
     name: string,
     email: string,
-    phone: string,
     password: string
   ): Promise<{ ok: boolean; error?: string }> {
     try {
@@ -154,16 +153,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const profile: Omit<User, "id"> = {
         name,
         email: email.toLowerCase(),
-        phone,
+        phone: "",
         isAdmin,
         createdAt: new Date().toISOString(),
         requestsCreated: 0,
         helpOffered: 0,
       };
-      await setDoc(doc(db, "users", cred.user.uid), {
+      // Fire-and-forget: don't await Firestore write so a slow/blocked write
+      // never hangs the signup button. onAuthStateChanged will load the profile
+      // once Firestore rules allow it.
+      setDoc(doc(db, "users", cred.user.uid), {
         ...profile,
         createdAtServer: serverTimestamp(),
-      });
+      }).catch((e) => console.warn("[Auth] profile write failed (will retry on next login):", e?.code));
       setUser({ id: cred.user.uid, ...profile });
       return { ok: true };
     } catch (e: any) {

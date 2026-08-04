@@ -56,7 +56,6 @@ export default function UserLoginScreen() {
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
   const [showRules, setShowRules] = useState(false);
@@ -87,7 +86,7 @@ export default function UserLoginScreen() {
   }
 
   async function handleSignup() {
-    if (!name.trim() || !email.trim() || !phone.trim() || !password.trim()) {
+    if (!name.trim() || !email.trim() || !password.trim()) {
       Alert.alert("Error", "Please fill in all fields.");
       return;
     }
@@ -99,7 +98,7 @@ export default function UserLoginScreen() {
       return;
     }
     setLoading(true);
-    const result = await signup(name.trim(), email.trim(), phone.trim(), password);
+    const result = await signup(name.trim(), email.trim(), password);
     setLoading(false);
     if (result.ok) {
       router.replace("/(auth)/location" as any);
@@ -183,22 +182,6 @@ export default function UserLoginScreen() {
           </View>
         </View>
 
-        {mode === "signup" && (
-          <View style={styles.inputGroup}>
-            <Text style={[styles.label, { color: colors.mutedForeground }]}>Phone Number</Text>
-            <View style={[styles.inputWrapper, { borderColor: colors.border, backgroundColor: colors.card }]}>
-              <Feather name="phone" size={16} color={colors.mutedForeground} />
-              <TextInput
-                style={[styles.input, { color: colors.foreground }]}
-                placeholder="+1 555 000 0000"
-                placeholderTextColor={colors.mutedForeground}
-                value={phone}
-                onChangeText={setPhone}
-                keyboardType="phone-pad"
-              />
-            </View>
-          </View>
-        )}
 
         {/* Password field */}
         <View style={styles.inputGroup}>
@@ -279,7 +262,7 @@ export default function UserLoginScreen() {
           </Text>
           <Pressable onPress={() => {
             setMode(mode === "login" ? "signup" : "login");
-            setName(""); setEmail(""); setPhone(""); setPassword(""); setShowRules(false);
+            setName(""); setEmail(""); setPassword(""); setShowRules(false);
           }}>
             <Text style={[styles.switchLink, { color: colors.primary }]}>
               {mode === "login" ? "Sign Up" : "Sign In"}
