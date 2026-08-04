@@ -1,6 +1,6 @@
-# [Project name]
+# HelpChain
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+A community help and donation mobile app built with Expo, backed by Firebase Auth + Firestore for real-time data sync.
 
 ## Run & Operate
 
@@ -26,7 +26,10 @@ _Populate as you build — short repo map plus pointers to the source-of-truth f
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- **Firebase Auth** — email/password sign-in. `ADMIN_EMAILS` list in `AuthContext.tsx` controls which emails get `isAdmin: true` on signup.
+- **Firestore collections**: `users`, `requests`, `donations`, `chat` — all with `onSnapshot` listeners for real-time updates. No AsyncStorage for app data.
+- **`getAuth(app)` (not `initializeAuth`)** — Firebase v12 removed `getReactNativePersistence` from the standard bundle. `getAuth` uses IndexedDB on web and in-memory on native. If native session persistence across restarts is needed later, add a custom persistence adapter.
+- **`EXPO_PUBLIC_` prefix required** — Expo's Metro bundler only inlines env vars prefixed with `EXPO_PUBLIC_` into the client bundle. Firebase config uses `EXPO_PUBLIC_FIREBASE_*` secrets.
 
 ## Product
 
