@@ -56,7 +56,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const unsubAuth = onAuthStateChanged(auth, async (fbUser: FirebaseUser | null) => {
       if (fbUser) {
         const profile = await loadUserProfile(fbUser.uid);
-        setUser(profile);
+        if (profile) {
+          setUser(profile);
+        } else {
+          // Firestore profile missing or rules not yet published — build a
+          // minimal user from Firebase Auth data so the app is never stuck
+          // in a "user is null while authenticated" state.
+          setUser({
+            id: fbUser.uid,
+            name:
+              fbUser.displayName ??
+              fbUser.email?.split("@")[0] ??
+              "User",
+            email: fbUser.email ?? "",
+            phone: "",
+            isAdmin: ADMIN_EMAILS.includes(
+              (fbUser.email ?? "").toLowerCase()
+            ),
+            createdAt:
+              fbUser.metadata.creationTime ?? new Date().toISOString(),
+            requestsCreated: 0,
+            helpOffered: 0,
+          });
+        }
       } else {
         setUser(null);
       }

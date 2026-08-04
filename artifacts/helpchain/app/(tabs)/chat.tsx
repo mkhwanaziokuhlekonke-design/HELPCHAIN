@@ -107,8 +107,8 @@ export default function ChatScreen() {
   return (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: colors.background }}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? TAB_BAR_HEIGHT + insets.bottom : 0}
+      behavior="padding"
+      keyboardVerticalOffset={TAB_BAR_HEIGHT + insets.bottom}
     >
       <LinearGradient colors={["#1F2937", "#0F4C75"]} style={[styles.header, { paddingTop: topPad }]}>
         <View style={styles.headerInner}>
