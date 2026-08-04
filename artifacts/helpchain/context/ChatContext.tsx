@@ -21,6 +21,8 @@ interface ChatContextType {
   messages: ChatMessage[];
   sendMessage: (userId: string, userName: string, text: string) => Promise<void>;
   loading: boolean;
+  /** Non-null when Firestore denied access or the listener failed */
+  error: string | null;
 }
 
 const ChatContext = createContext<ChatContextType | null>(null);
@@ -28,33 +30,51 @@ const ChatContext = createContext<ChatContextType | null>(null);
 export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const q = query(collection(db, "chat"), orderBy("createdAt", "asc"));
-    const unsub = onSnapshot(q, (snap) => {
-      const msgs: ChatMessage[] = snap.docs.map((d) => ({
-        id: d.id,
-        ...(d.data() as Omit<ChatMessage, "id">),
-      }));
-      setMessages(msgs);
-      setLoading(false);
-    }, () => setLoading(false));
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const msgs: ChatMessage[] = snap.docs.map((d) => ({
+          id: d.id,
+          ...(d.data() as Omit<ChatMessage, "id">),
+        }));
+        setMessages(msgs);
+        setError(null);
+        setLoading(false);
+      },
+      (err) => {
+        console.error("[ChatContext] snapshot error:", err.code, err.message);
+        setError(
+          err.code === "permission-denied"
+            ? "permission-denied"
+            : "unavailable"
+        );
+        setLoading(false);
+      }
+    );
     return () => unsub();
   }, []);
 
   async function sendMessage(userId: string, userName: string, text: string) {
-    const now = new Date().toISOString();
-    await addDoc(collection(db, "chat"), {
-      userId,
-      userName,
-      text: text.trim(),
-      createdAt: now,
-      _serverTs: serverTimestamp(),
-    });
+    try {
+      await addDoc(collection(db, "chat"), {
+        userId,
+        userName,
+        text: text.trim(),
+        createdAt: new Date().toISOString(),
+        _serverTs: serverTimestamp(),
+      });
+    } catch (e: any) {
+      console.error("[ChatContext] sendMessage failed:", e?.code, e?.message);
+      throw new Error(e?.code ?? "send-failed");
+    }
   }
 
   return (
-    <ChatContext.Provider value={{ messages, sendMessage, loading }}>
+    <ChatContext.Provider value={{ messages, sendMessage, loading, error }}>
       {children}
     </ChatContext.Provider>
   );

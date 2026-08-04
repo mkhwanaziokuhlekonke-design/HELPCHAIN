@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
   FlatList,
   KeyboardAvoidingView,
   Platform,
@@ -60,7 +62,7 @@ function MessageBubble({ msg, isOwn }: { msg: ChatMessage; isOwn: boolean }) {
 export default function ChatScreen() {
   const colors = useColors();
   const { user } = useAuth();
-  const { messages, sendMessage, loading } = useChat();
+  const { messages, sendMessage, loading, error } = useChat();
   const insets = useSafeAreaInsets();
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
@@ -77,11 +79,24 @@ export default function ChatScreen() {
 
   async function handleSend() {
     if (!text.trim() || !user || sending) return;
+    const draft = text.trim();
     setSending(true);
-    await sendMessage(user.id, user.name, text.trim());
     setText("");
-    setSending(false);
-    setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
+    try {
+      await sendMessage(user.id, user.name, draft);
+      setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
+    } catch (e: any) {
+      setText(draft); // restore so user doesn't lose message
+      const isPerms = e?.message?.includes("permission-denied");
+      Alert.alert(
+        "Message not sent",
+        isPerms
+          ? "Firestore permissions are blocking the chat collection. Please publish the security rules in Firebase Console (see instructions below)."
+          : "Could not send message. Check your connection and try again."
+      );
+    } finally {
+      setSending(false);
+    }
   }
 
   const onlineCount = 12;
@@ -138,12 +153,31 @@ export default function ChatScreen() {
           );
         }}
         ListEmptyComponent={
-          <View style={styles.empty}>
-            <Feather name="message-circle" size={40} color={colors.muted} />
-            <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
-              No messages yet. Be the first to say hi!
-            </Text>
-          </View>
+          loading ? (
+            <View style={styles.empty}>
+              <ActivityIndicator color={colors.primary} />
+            </View>
+          ) : error ? (
+            <View style={styles.empty}>
+              <Feather name="alert-circle" size={40} color="#EF4444" />
+              <Text style={[styles.emptyText, { color: "#EF4444", fontFamily: "Inter_600SemiBold" }]}>
+                {error === "permission-denied" ? "Chat blocked by Firestore rules" : "Could not load messages"}
+              </Text>
+              {error === "permission-denied" && (
+                <Text style={[styles.emptyText, { color: colors.mutedForeground, fontSize: 12, marginTop: 4 }]}>
+                  Go to Firebase Console → Firestore → Rules and publish the{" "}
+                  <Text style={{ fontFamily: "Inter_600SemiBold" }}>chat</Text> collection rules.
+                </Text>
+              )}
+            </View>
+          ) : (
+            <View style={styles.empty}>
+              <Feather name="message-circle" size={40} color={colors.muted} />
+              <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
+                No messages yet. Be the first to say hi! 👋
+              </Text>
+            </View>
+          )
         }
       />
 
