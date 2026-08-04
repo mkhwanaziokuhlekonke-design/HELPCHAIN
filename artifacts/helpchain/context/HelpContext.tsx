@@ -81,6 +81,18 @@ export function HelpProvider({ children }: { children: React.ReactNode }) {
     };
     try {
       const ref = await addDoc(collection(db, "requests"), data);
+      // Broadcast notification to all users (fire-and-forget)
+      addDoc(collection(db, "notifications"), {
+        title: req.isEmergency ? "🚨 Emergency Request" : "🆕 New Help Request",
+        body: `${req.requesterName} needs help: ${req.title}`,
+        type: req.isEmergency ? "emergency_alert" : "new_request",
+        targetUserId: "all",
+        createdByUid: req.requesterId,
+        read: false,
+        requestId: ref.id,
+        createdAt: new Date().toISOString(),
+        _serverTs: serverTimestamp(),
+      }).catch(() => {});
       return { id: ref.id, ...data };
     } catch (e: any) {
       console.error("[HelpContext] addRequest failed:", e?.code, e?.message);

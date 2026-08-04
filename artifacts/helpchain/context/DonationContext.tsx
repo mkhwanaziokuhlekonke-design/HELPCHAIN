@@ -73,6 +73,17 @@ export function DonationProvider({ children }: { children: React.ReactNode }) {
         createdAt: new Date().toISOString(),
         _serverTs: serverTimestamp(),
       });
+      // Broadcast notification to all users (fire-and-forget)
+      addDoc(collection(db, "notifications"), {
+        title: "🎁 New Donation",
+        body: `${donorName} donated ${quantity} ${itemType} item${quantity !== 1 ? "s" : ""}${description ? ` — ${description}` : ""}`,
+        type: "new_donation",
+        targetUserId: "all",
+        createdByUid: donorId,
+        read: false,
+        createdAt: new Date().toISOString(),
+        _serverTs: serverTimestamp(),
+      }).catch(() => {});
     } catch (e: any) {
       console.error("[DonationContext] addDonation failed:", e?.code, e?.message);
       throw new Error(e?.message ?? "Failed to submit donation");

@@ -14,6 +14,7 @@ import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { NotifToast } from "@/components/NotifToast";
 import { AuthProvider } from "@/context/AuthContext";
 import { ChatProvider } from "@/context/ChatContext";
 import { DonationProvider } from "@/context/DonationContext";
@@ -66,6 +67,7 @@ export default function RootLayout() {
                       <KeyboardProvider>
                         <RootLayoutNav />
                       </KeyboardProvider>
+                      <NotifToast />
                     </GestureHandlerRootView>
                   </NotificationProvider>
                 </DonationProvider>
