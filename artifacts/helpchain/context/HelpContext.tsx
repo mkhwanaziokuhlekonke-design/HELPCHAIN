@@ -8,8 +8,9 @@ import {
   serverTimestamp,
   updateDoc,
 } from "firebase/firestore";
+import { onAuthStateChanged } from "firebase/auth";
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { db } from "@/lib/firebase";
+import { auth, db } from "@/lib/firebase";
 
 export type HelpCategory = "emergency" | "medical" | "food" | "transport" | "daily" | "other";
 export type HelpStatus = "open" | "accepted" | "completed" | "cancelled";
@@ -56,16 +57,33 @@ export function HelpProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const q = query(collection(db, "requests"), orderBy("createdAt", "desc"));
-    const unsub = onSnapshot(q, (snap) => {
-      const reqs: HelpRequest[] = snap.docs.map((d) => ({
-        id: d.id,
-        ...(d.data() as Omit<HelpRequest, "id">),
-      }));
-      setRequests(reqs);
-      setLoading(false);
-    }, () => setLoading(false));
-    return () => unsub();
+    // Gate on auth — prevents permission-denied on first load before login
+    const unsubAuth = onAuthStateChanged(auth, (fbUser) => {
+      if (!fbUser) {
+        setRequests([]);
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
+      const q = query(collection(db, "requests"), orderBy("createdAt", "desc"));
+      const unsubSnap = onSnapshot(
+        q,
+        (snap) => {
+          const reqs: HelpRequest[] = snap.docs.map((d) => ({
+            id: d.id,
+            ...(d.data() as Omit<HelpRequest, "id">),
+          }));
+          setRequests(reqs);
+          setLoading(false);
+        },
+        (err) => {
+          console.warn("[HelpContext] snapshot error:", err.code);
+          setLoading(false);
+        }
+      );
+      return unsubSnap;
+    });
+    return () => unsubAuth();
   }, []);
 
   async function addRequest(

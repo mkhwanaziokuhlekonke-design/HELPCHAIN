@@ -6,8 +6,9 @@ import {
   query,
   serverTimestamp,
 } from "firebase/firestore";
+import { onAuthStateChanged } from "firebase/auth";
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { db } from "@/lib/firebase";
+import { auth, db } from "@/lib/firebase";
 
 export interface Donation {
   id: string;
@@ -39,19 +40,27 @@ export function DonationProvider({ children }: { children: React.ReactNode }) {
   const [donations, setDonations] = useState<Donation[]>([]);
 
   useEffect(() => {
-    const q = query(collection(db, "donations"), orderBy("createdAt", "desc"));
-    const unsub = onSnapshot(
-      q,
-      (snap) => {
-        const items: Donation[] = snap.docs.map((d) => ({
-          id: d.id,
-          ...(d.data() as Omit<Donation, "id">),
-        }));
-        setDonations(items);
-      },
-      (err) => console.warn("[DonationContext] snapshot error:", err.code)
-    );
-    return () => unsub();
+    // Gate on auth — prevents permission-denied on first load before login
+    const unsubAuth = onAuthStateChanged(auth, (fbUser) => {
+      if (!fbUser) {
+        setDonations([]);
+        return;
+      }
+      const q = query(collection(db, "donations"), orderBy("createdAt", "desc"));
+      const unsubSnap = onSnapshot(
+        q,
+        (snap) => {
+          const items: Donation[] = snap.docs.map((d) => ({
+            id: d.id,
+            ...(d.data() as Omit<Donation, "id">),
+          }));
+          setDonations(items);
+        },
+        (err) => console.warn("[DonationContext] snapshot error:", err.code)
+      );
+      return unsubSnap;
+    });
+    return () => unsubAuth();
   }, []);
 
   async function addDonation(

@@ -3,6 +3,7 @@ import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
   Alert,
+  ActivityIndicator,
   Image,
   Modal,
   Platform,
@@ -303,6 +304,169 @@ function AdminDashboard() {
   );
 }
 
+/* ─── Community Feed (live from Firestore) ─── */
+function CommunityFeed() {
+  const colors = useColors();
+  const router = useRouter();
+  const { requests, loading: reqLoading } = useHelp();
+  const { donations } = useDonations();
+
+  type FeedItem =
+    | { kind: "request"; id: string; title: string; name: string; sub: string; ts: string; emergency: boolean }
+    | { kind: "donation"; id: string; title: string; name: string; sub: string; ts: string };
+
+  const feed: FeedItem[] = [
+    ...requests.slice(0, 8).map((r) => ({
+      kind: "request" as const,
+      id: r.id,
+      title: r.title,
+      name: r.requesterName,
+      sub: r.category.charAt(0).toUpperCase() + r.category.slice(1),
+      ts: r.createdAt,
+      emergency: r.isEmergency,
+    })),
+    ...donations.slice(0, 4).map((d) => ({
+      kind: "donation" as const,
+      id: d.id,
+      title: `${d.quantity}× ${d.itemType}`,
+      name: d.donorName,
+      sub: d.description || "Donated to community",
+      ts: d.createdAt,
+    })),
+  ].sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime()).slice(0, 10);
+
+  return (
+    <View style={[feed_s.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      <View style={feed_s.header}>
+        <View style={feed_s.headerLeft}>
+          <View style={[feed_s.dot, { backgroundColor: "#10B981" }]} />
+          <Text style={[feed_s.title, { color: colors.foreground }]}>Community Activity</Text>
+        </View>
+        <Pressable onPress={() => router.push("/(tabs)/requests" as any)}>
+          <Text style={[feed_s.viewAll, { color: colors.primary }]}>See all</Text>
+        </Pressable>
+      </View>
+
+      {reqLoading ? (
+        <ActivityIndicator color={colors.primary} style={{ marginVertical: 24 }} />
+      ) : feed.length === 0 ? (
+        <View style={feed_s.empty}>
+          <Feather name="inbox" size={28} color={colors.muted} />
+          <Text style={[feed_s.emptyText, { color: colors.mutedForeground }]}>
+            No activity yet — be the first to post!
+          </Text>
+        </View>
+      ) : (
+        feed.map((item) => {
+          const isEmergency = item.kind === "request" && item.emergency;
+          const iconName =
+            item.kind === "donation"
+              ? "gift"
+              : isEmergency
+              ? "alert-triangle"
+              : "life-buoy";
+          const iconBg =
+            item.kind === "donation"
+              ? "#F3E8FF"
+              : isEmergency
+              ? "#FEE2E2"
+              : "#DBEAFE";
+          const iconColor =
+            item.kind === "donation"
+              ? "#7C3AED"
+              : isEmergency
+              ? "#DC2626"
+              : "#2563EB";
+
+          return (
+            <Pressable
+              key={`${item.kind}-${item.id}`}
+              onPress={() =>
+                item.kind === "request"
+                  ? router.push(`/request/${item.id}` as any)
+                  : undefined
+              }
+              style={({ pressed }) => [
+                feed_s.row,
+                { borderTopColor: colors.border, opacity: pressed ? 0.7 : 1 },
+              ]}
+            >
+              <View style={[feed_s.iconWrap, { backgroundColor: iconBg }]}>
+                <Feather name={iconName as any} size={16} color={iconColor} />
+              </View>
+              <View style={feed_s.textCol}>
+                <View style={feed_s.titleRow}>
+                  {isEmergency && (
+                    <View style={feed_s.emergencyPill}>
+                      <Text style={feed_s.emergencyPillText}>EMERGENCY</Text>
+                    </View>
+                  )}
+                  <Text style={[feed_s.itemTitle, { color: colors.foreground }]} numberOfLines={1}>
+                    {item.title}
+                  </Text>
+                </View>
+                <Text style={[feed_s.itemSub, { color: colors.mutedForeground }]} numberOfLines={1}>
+                  {item.kind === "donation" ? "🎁 " : ""}
+                  {item.name} · {item.sub}
+                </Text>
+              </View>
+              <Text style={[feed_s.time, { color: colors.mutedForeground }]}>{timeAgo(item.ts)}</Text>
+            </Pressable>
+          );
+        })
+      )}
+    </View>
+  );
+}
+
+const feed_s = StyleSheet.create({
+  card: {
+    borderRadius: 16,
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  headerLeft: { flexDirection: "row", alignItems: "center", gap: 7 },
+  dot: { width: 8, height: 8, borderRadius: 4 },
+  title: { fontSize: 14, fontFamily: "Inter_700Bold" },
+  viewAll: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  empty: { alignItems: "center", paddingVertical: 28, gap: 8 },
+  emptyText: { fontSize: 13, fontFamily: "Inter_400Regular", textAlign: "center", paddingHorizontal: 16 },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+  },
+  iconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  textCol: { flex: 1, gap: 3 },
+  titleRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  itemTitle: { fontSize: 13, fontFamily: "Inter_600SemiBold", flex: 1 },
+  itemSub: { fontSize: 11, fontFamily: "Inter_400Regular" },
+  emergencyPill: {
+    backgroundColor: "#DC2626",
+    borderRadius: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+  },
+  emergencyPillText: { fontSize: 9, fontFamily: "Inter_700Bold", color: "#fff", letterSpacing: 0.5 },
+  time: { fontSize: 10, fontFamily: "Inter_400Regular" },
+});
+
 /* ─── main screen ─── */
 export default function HomeScreen() {
   const colors = useColors();
@@ -420,6 +584,9 @@ export default function HomeScreen() {
                 </Pressable>
               ))}
             </View>
+
+            {/* ── Live Community Feed ── */}
+            <CommunityFeed />
           </>
         )}
       </ScrollView>
