@@ -579,13 +579,9 @@ export default function HomeScreen() {
       {/* ── Full-screen map ── */}
       <LiveLocationMap fullScreen />
 
-      {/* ── Top gradient scrim + greeting ── */}
-      <LinearGradient
-        colors={["rgba(15,23,42,0.78)", "rgba(15,23,42,0)"]}
-        style={[styles.topOverlay, { paddingTop: topPad }]}
-        pointerEvents="box-none"
-      >
-        <View style={styles.headerRow}>
+      {/* ── Top greeting card ── */}
+      <View style={[styles.topOverlay, { top: topPad }]} pointerEvents="box-none">
+        <View style={styles.greetingCard}>
           <View style={styles.greetingCol}>
             <Text style={styles.greetingSmall}>{greeting()},</Text>
             <Text style={styles.greetingName}>{user?.name?.split(" ")[0] ?? "Friend"}</Text>
@@ -593,7 +589,7 @@ export default function HomeScreen() {
           </View>
           <UserAvatar name={user?.name ?? "U"} size={44} />
         </View>
-      </LinearGradient>
+      </View>
 
       {/* ── Floating action buttons at bottom ── */}
       <View style={[styles.floatingBar, { bottom: btnBottom }]}>
@@ -810,9 +806,9 @@ const styles = StyleSheet.create({
   headerGrad: { paddingHorizontal: 20, paddingBottom: 22 },
   headerRow: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", paddingTop: 14, paddingHorizontal: 20 },
   greetingCol: { gap: 2, flex: 1 },
-  greetingSmall: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#1D4ED8" },
-  greetingName: { fontSize: 24, fontFamily: "Inter_700Bold", color: "#1E3A8A" },
-  slogan: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#2563EB", marginTop: 2 },
+  greetingSmall: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#64748B" },
+  greetingName: { fontSize: 22, fontFamily: "Inter_700Bold", color: "#1E3A8A" },
+  slogan: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#2563EB", marginTop: 2 },
   headerRight: { flexDirection: "row", alignItems: "center", gap: 10, marginLeft: 12 },
   adminBtn: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20 },
   adminBtnText: { color: "#fff", fontSize: 12, fontFamily: "Inter_600SemiBold" },
@@ -820,8 +816,22 @@ const styles = StyleSheet.create({
   // full-screen map overlay
   topOverlay: {
     position: "absolute",
-    top: 0, left: 0, right: 0,
-    paddingBottom: 40,
+    left: 12,
+    right: 12,
+  },
+  greetingCard: {
+    backgroundColor: "#fff",
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 4,
   },
   // floating bottom action bar
   floatingBar: {
