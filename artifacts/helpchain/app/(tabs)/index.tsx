@@ -501,6 +501,7 @@ export default function HomeScreen() {
       key: "request",
       icon: "life-buoy",
       title: "Request Help",
+      shortTitle: "Request",
       sub: "Post a help request",
       colors: ["#2563EB", "#1D4ED8"] as [string, string],
       onPress: () => tap(() => router.push("/request/new" as any)),
@@ -509,6 +510,7 @@ export default function HomeScreen() {
       key: "emergency",
       icon: "alert-triangle",
       title: "Emergency",
+      shortTitle: "Emergency",
       sub: "Get urgent help now",
       colors: ["#DC2626", "#B91C1C"] as [string, string],
       onPress: () => tap(() => router.push("/request/new?emergency=1" as any)),
@@ -517,6 +519,7 @@ export default function HomeScreen() {
       key: "chat",
       icon: "message-circle",
       title: "Community Chat",
+      shortTitle: "Chat",
       sub: "Talk with your community",
       colors: ["#14B8A6", "#0D9488"] as [string, string],
       onPress: () => tap(() => router.push("/(tabs)/chat" as any)),
@@ -525,24 +528,25 @@ export default function HomeScreen() {
       key: "donate",
       icon: "gift",
       title: "Donate",
+      shortTitle: "Donate",
       sub: "Support HelpChain",
       colors: ["#0EA5E9", "#0284C7"] as [string, string],
       onPress: () => tap(() => setDonateVisible(true)),
     },
   ];
 
-  return (
-    <View style={{ flex: 1, backgroundColor: isAdmin ? "#F1F5F9" : colors.background }}>
-      {/* Header */}
-      <LinearGradient colors={["#1F2937", "#1E3A8A"]} style={[styles.headerGrad, { paddingTop: topPad }]}>
-        <View style={styles.headerRow}>
-          <View style={styles.greetingCol}>
-            <Text style={styles.greetingSmall}>{greeting()},</Text>
-            <Text style={styles.greetingName}>{user?.name?.split(" ")[0] ?? "Friend"}</Text>
-            <Text style={styles.slogan}>Help together. Grow together.</Text>
-          </View>
-          <View style={styles.headerRight}>
-            {isAdmin && (
+  // ── Admin view ────────────────────────────────────────────────────────────
+  if (isAdmin) {
+    return (
+      <View style={{ flex: 1, backgroundColor: "#F1F5F9" }}>
+        <LinearGradient colors={["#1F2937", "#1E3A8A"]} style={[styles.headerGrad, { paddingTop: topPad }]}>
+          <View style={styles.headerRow}>
+            <View style={styles.greetingCol}>
+              <Text style={styles.greetingSmall}>{greeting()},</Text>
+              <Text style={styles.greetingName}>{user?.name?.split(" ")[0] ?? "Friend"}</Text>
+              <Text style={styles.slogan}>Help together. Grow together.</Text>
+            </View>
+            <View style={styles.headerRight}>
               <Pressable
                 onPress={() => tap(() => router.push("/admin" as any))}
                 style={[styles.adminBtn, { backgroundColor: "#14B8A6" }]}
@@ -550,50 +554,67 @@ export default function HomeScreen() {
                 <Feather name="settings" size={14} color="#fff" />
                 <Text style={styles.adminBtnText}>Full View</Text>
               </Pressable>
-            )}
-            <UserAvatar name={user?.name ?? "U"} size={44} isAdmin={isAdmin} />
+              <UserAvatar name={user?.name ?? "U"} size={44} isAdmin />
+            </View>
           </View>
+        </LinearGradient>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ padding: 14, paddingBottom: bottomPad }}
+          showsVerticalScrollIndicator={false}
+        >
+          <AdminDashboard />
+        </ScrollView>
+      </View>
+    );
+  }
+
+  // ── User view: full-screen map ─────────────────────────────────────────────
+  // Floating buttons sit just above the tab bar
+  const TAB_BAR_H = Platform.OS === "web" ? 84 : 49;
+  const btnBottom = Platform.OS === "web" ? TAB_BAR_H + 12 : TAB_BAR_H + insets.bottom + 12;
+
+  return (
+    <View style={{ flex: 1 }}>
+      {/* ── Full-screen map ── */}
+      <LiveLocationMap fullScreen />
+
+      {/* ── Top gradient scrim + greeting ── */}
+      <LinearGradient
+        colors={["rgba(15,23,42,0.78)", "rgba(15,23,42,0)"]}
+        style={[styles.topOverlay, { paddingTop: topPad }]}
+        pointerEvents="box-none"
+      >
+        <View style={styles.headerRow}>
+          <View style={styles.greetingCol}>
+            <Text style={styles.greetingSmall}>{greeting()},</Text>
+            <Text style={styles.greetingName}>{user?.name?.split(" ")[0] ?? "Friend"}</Text>
+            <Text style={styles.slogan}>Help together. Grow together.</Text>
+          </View>
+          <UserAvatar name={user?.name ?? "U"} size={44} />
         </View>
       </LinearGradient>
 
-      {/* Body */}
-      <ScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={[{ paddingBottom: bottomPad }, isAdmin ? { padding: 14, gap: 0 } : styles.scroll]}
-        showsVerticalScrollIndicator={false}
-      >
-        {isAdmin ? (
-          <AdminDashboard />
-        ) : (
-          <>
-            <LiveLocationMap />
-            <View style={styles.buttonGrid}>
-              {ACTION_BUTTONS.map((btn) => (
-                <Pressable
-                  key={btn.key}
-                  onPress={btn.onPress}
-                  style={({ pressed }) => [styles.actionBtn, styles.actionBtnHalf, { opacity: pressed ? 0.9 : 1 }]}
-                >
-                  <LinearGradient colors={btn.colors} style={styles.actionBtnInner}>
-                    <View style={styles.actionIconRing}>
-                      <Feather name={btn.icon as any} size={28} color="#fff" />
-                    </View>
-                    <Text style={styles.actionTitle}>{btn.title}</Text>
-                    <Text style={styles.actionSub}>{btn.sub}</Text>
-                  </LinearGradient>
-                </Pressable>
-              ))}
-            </View>
+      {/* ── Floating action buttons at bottom ── */}
+      <View style={[styles.floatingBar, { bottom: btnBottom }]}>
+        {ACTION_BUTTONS.map((btn) => (
+          <Pressable
+            key={btn.key}
+            onPress={btn.onPress}
+            style={({ pressed }) => [styles.floatBtn, { opacity: pressed ? 0.85 : 1 }]}
+          >
+            <LinearGradient colors={btn.colors} style={styles.floatBtnInner}>
+              <View style={styles.floatIconRing}>
+                <Feather name={btn.icon as any} size={22} color="#fff" />
+              </View>
+              <Text style={styles.floatLabel}>{btn.shortTitle}</Text>
+            </LinearGradient>
+          </Pressable>
+        ))}
+      </View>
 
-            {/* ── Live Community Feed ── */}
-            <CommunityFeed />
-          </>
-        )}
-      </ScrollView>
-
-      {/* Donate Modal (user only) */}
-      {!isAdmin && (
-        <Modal visible={donateVisible} transparent animationType="slide">
+      {/* Donate Modal */}
+      <Modal visible={donateVisible} transparent animationType="slide">
           <View style={styles.modalOverlay}>
             <View style={[styles.donateModal, { backgroundColor: colors.card }]}>
               <View style={styles.modalHandle} />
@@ -720,8 +741,7 @@ export default function HomeScreen() {
               </ScrollView>
             </View>
           </View>
-        </Modal>
-      )}
+      </Modal>
     </View>
   );
 }
@@ -786,8 +806,9 @@ const adm = StyleSheet.create({
 
 /* ─── user home styles ─── */
 const styles = StyleSheet.create({
+  // admin reuse
   headerGrad: { paddingHorizontal: 20, paddingBottom: 22 },
-  headerRow: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", paddingTop: 14 },
+  headerRow: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", paddingTop: 14, paddingHorizontal: 20 },
   greetingCol: { gap: 2, flex: 1 },
   greetingSmall: { fontSize: 13, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.6)" },
   greetingName: { fontSize: 24, fontFamily: "Inter_700Bold", color: "#fff" },
@@ -796,6 +817,51 @@ const styles = StyleSheet.create({
   adminBtn: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20 },
   adminBtnText: { color: "#fff", fontSize: 12, fontFamily: "Inter_600SemiBold" },
   scroll: { padding: 16, gap: 16 },
+  // full-screen map overlay
+  topOverlay: {
+    position: "absolute",
+    top: 0, left: 0, right: 0,
+    paddingBottom: 40,
+  },
+  // floating bottom action bar
+  floatingBar: {
+    position: "absolute",
+    left: 12,
+    right: 12,
+    flexDirection: "row",
+    gap: 8,
+  },
+  floatBtn: {
+    flex: 1,
+    borderRadius: 16,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  floatBtnInner: {
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    gap: 6,
+  },
+  floatIconRing: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(255,255,255,0.18)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  floatLabel: {
+    color: "#fff",
+    fontSize: 10,
+    fontFamily: "Inter_600SemiBold",
+    textAlign: "center",
+  },
+  // kept for donate modal
   buttonGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
   actionBtn: { borderRadius: 18, overflow: "hidden" },
   actionBtnHalf: { width: "47.5%" },

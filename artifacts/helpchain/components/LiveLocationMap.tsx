@@ -65,7 +65,7 @@ function buildLeafletHTML(lat: number, lng: number): string {
 }
 
 /** Web: render using <iframe srcdoc> so Leaflet loads cleanly without X-Frame-Options issues */
-function WebLeafletMap({ lat, lng }: { lat: number; lng: number }) {
+function WebLeafletMap({ lat, lng, fullScreen }: { lat: number; lng: number; fullScreen?: boolean }) {
   const html = buildLeafletHTML(lat, lng);
   const ref = useRef<HTMLIFrameElement>(null);
 
@@ -79,18 +79,20 @@ function WebLeafletMap({ lat, lng }: { lat: number; lng: number }) {
     ref,
     title: "Live location map",
     srcDoc: html,
-    style: {
-      width: "100%",
-      height: "220px",
-      border: "none",
-      borderRadius: "12px",
-      display: "block",
-    } as React.CSSProperties,
+    style: (fullScreen
+      ? { position: "absolute", inset: 0, width: "100%", height: "100%", border: "none", display: "block" }
+      : { width: "100%", height: "220px", border: "none", borderRadius: "12px", display: "block" }
+    ) as React.CSSProperties,
     sandbox: "allow-scripts allow-same-origin",
   });
 }
 
-export function LiveLocationMap() {
+interface LiveLocationMapProps {
+  /** When true the map fills its parent with no card chrome */
+  fullScreen?: boolean;
+}
+
+export function LiveLocationMap({ fullScreen = false }: LiveLocationMapProps) {
   const colors = useColors();
   const [coords, setCoords] = useState<Coords | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -167,6 +169,45 @@ export function LiveLocationMap() {
 
   const fmt = (n: number, d: number) => n.toFixed(d);
 
+  // ── Full-screen mode: raw map fills the parent, no card chrome ──
+  if (fullScreen) {
+    return (
+      <View style={StyleSheet.absoluteFill}>
+        {loading && (
+          <View style={[StyleSheet.absoluteFill, { alignItems: "center", justifyContent: "center", backgroundColor: "#1E3A8A" }]}>
+            <ActivityIndicator color="#fff" size="large" />
+          </View>
+        )}
+        {error && !loading && (
+          <View style={[StyleSheet.absoluteFill, { alignItems: "center", justifyContent: "center", backgroundColor: "#1E3A8A", gap: 10 }]}>
+            <Feather name="map-pin" size={32} color="rgba(255,255,255,0.6)" />
+            <Text style={{ color: "rgba(255,255,255,0.7)", fontSize: 13, fontFamily: "Inter_400Regular", textAlign: "center", paddingHorizontal: 32 }}>
+              {error}
+            </Text>
+          </View>
+        )}
+        {coords && !loading && (
+          Platform.OS === "web" ? (
+            <WebLeafletMap lat={coords.latitude} lng={coords.longitude} fullScreen />
+          ) : WebView ? (
+            <WebView
+              source={{ html: buildLeafletHTML(coords.latitude, coords.longitude) }}
+              style={StyleSheet.absoluteFill}
+              scrollEnabled={false}
+              javaScriptEnabled
+              domStorageEnabled
+            />
+          ) : (
+            <View style={[StyleSheet.absoluteFill, { alignItems: "center", justifyContent: "center", backgroundColor: "#DBEAFE" }]}>
+              <Feather name="map" size={32} color="#2563EB" />
+            </View>
+          )
+        )}
+      </View>
+    );
+  }
+
+  // ── Card mode (default) ──
   return (
     <View style={[styles.card, { backgroundColor: colors.card }]}>
       {/* Header */}
