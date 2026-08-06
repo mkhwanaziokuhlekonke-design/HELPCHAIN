@@ -87,22 +87,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => unsubAuth();
   }, []);
 
-  // Listen to all users (for admin panel) — fail silently if rules block it
+  // Listen to all users (for admin panel) — gated on auth to avoid permission-denied before login
   useEffect(() => {
-    const unsubUsers = onSnapshot(
-      collection(db, "users"),
-      (snap) => {
-        const users: User[] = snap.docs.map((d) => ({
-          id: d.id,
-          ...(d.data() as Omit<User, "id">),
-        }));
-        setAllUsers(users);
-      },
-      (err) => {
-        console.warn("[Firestore] allUsers listener error (check security rules):", err.code, err.message);
+    const unsubAuth = onAuthStateChanged(auth, (fbUser) => {
+      if (!fbUser) {
+        setAllUsers([]);
+        return;
       }
-    );
-    return () => unsubUsers();
+      const unsubUsers = onSnapshot(
+        collection(db, "users"),
+        (snap) => {
+          const users: User[] = snap.docs.map((d) => ({
+            id: d.id,
+            ...(d.data() as Omit<User, "id">),
+          }));
+          setAllUsers(users);
+        },
+        (err) => {
+          console.warn("[Firestore] allUsers listener error:", err.code);
+        }
+      );
+      return unsubUsers;
+    });
+    return () => unsubAuth();
   }, []);
 
   async function loadUserProfile(uid: string): Promise<User | null> {

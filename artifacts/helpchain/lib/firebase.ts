@@ -2,13 +2,19 @@ import { getApp, getApps, initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
+// Strip surrounding quotes/spaces that get accidentally included when
+// pasting values into Replit Secrets (e.g. "hopeproject-47613c16" → hopeproject-47613c16)
+function clean(val: string | undefined): string {
+  return (val ?? "").replace(/^["'\s]+|["'\s]+$/g, "");
+}
+
 const firebaseConfig = {
-  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
+  apiKey:            clean(process.env.EXPO_PUBLIC_FIREBASE_API_KEY),
+  authDomain:        clean(process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN),
+  projectId:         clean(process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID),
+  storageBucket:     clean(process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET),
+  messagingSenderId: clean(process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID),
+  appId:             clean(process.env.EXPO_PUBLIC_FIREBASE_APP_ID),
 };
 
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
@@ -17,4 +23,4 @@ const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 // - web: IndexedDB / localStorage (survives page refresh)
 // - native (Expo Go): in-memory (session lasts until app closes)
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+export const db   = getFirestore(app);
