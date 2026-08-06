@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { UserAvatar } from "@/components/UserAvatar";
 import { useAuth } from "@/context/AuthContext";
 import { ChatMessage, useChat } from "@/context/ChatContext";
+import { usePresence } from "@/context/PresenceContext";
 import { useColors } from "@/hooks/useColors";
 
 function formatTime(dateStr: string) {
@@ -63,6 +64,7 @@ export default function ChatScreen() {
   const colors = useColors();
   const { user } = useAuth();
   const { messages, sendMessage, loading, error } = useChat();
+  const { activeCount } = usePresence();
   const insets = useSafeAreaInsets();
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
@@ -102,7 +104,6 @@ export default function ChatScreen() {
     }
   }
 
-  const onlineCount = 12;
 
   return (
     <KeyboardAvoidingView
@@ -120,7 +121,9 @@ export default function ChatScreen() {
               <Text style={styles.headerTitle}>Community Chat</Text>
               <View style={styles.onlineRow}>
                 <View style={styles.onlineDot} />
-                <Text style={styles.onlineText}>{onlineCount} members active</Text>
+                <Text style={styles.onlineText}>
+                  {activeCount > 0 ? `${activeCount} member${activeCount === 1 ? "" : "s"} active` : "Loading…"}
+                </Text>
               </View>
             </View>
           </View>

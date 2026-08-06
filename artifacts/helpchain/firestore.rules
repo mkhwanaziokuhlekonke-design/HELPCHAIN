@@ -47,5 +47,11 @@ service cloud.firestore {
       allow create: if isAuthed();
       allow update, delete: if false;
     }
+
+    // Presence — each user can write their own; anyone signed in can read all
+    match /presence/{userId} {
+      allow read: if isAuthed();
+      allow write: if isAuthed() && request.auth.uid == userId;
+    }
   }
 }

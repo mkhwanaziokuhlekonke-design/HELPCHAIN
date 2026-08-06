@@ -20,6 +20,7 @@ import { ChatProvider } from "@/context/ChatContext";
 import { DonationProvider } from "@/context/DonationContext";
 import { HelpProvider } from "@/context/HelpContext";
 import { NotificationProvider } from "@/context/NotificationContext";
+import { PresenceProvider } from "@/context/PresenceContext";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -63,12 +64,14 @@ export default function RootLayout() {
               <ChatProvider>
                 <DonationProvider>
                   <NotificationProvider>
-                    <GestureHandlerRootView style={{ flex: 1 }}>
-                      <KeyboardProvider>
-                        <RootLayoutNav />
-                      </KeyboardProvider>
-                      <NotifToast />
-                    </GestureHandlerRootView>
+                    <PresenceProvider>
+                      <GestureHandlerRootView style={{ flex: 1 }}>
+                        <KeyboardProvider>
+                          <RootLayoutNav />
+                        </KeyboardProvider>
+                        <NotifToast />
+                      </GestureHandlerRootView>
+                    </PresenceProvider>
                   </NotificationProvider>
                 </DonationProvider>
               </ChatProvider>

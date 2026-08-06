@@ -25,6 +25,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useHelp } from "@/context/HelpContext";
 import { useChat } from "@/context/ChatContext";
 import { useDonations } from "@/context/DonationContext";
+import { usePresence } from "@/context/PresenceContext";
 import { useColors } from "@/hooks/useColors";
 
 const logo = require("@/assets/images/logo.jpeg");
@@ -472,6 +473,7 @@ export default function HomeScreen() {
   const colors = useColors();
   const { user } = useAuth();
   const { addDonation } = useDonations();
+  const { activeCount } = usePresence();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [donateVisible, setDonateVisible] = useState(false);
@@ -585,7 +587,14 @@ export default function HomeScreen() {
           <View style={styles.greetingCol}>
             <Text style={styles.greetingSmall}>{greeting()},</Text>
             <Text style={styles.greetingName}>{user?.name?.split(" ")[0] ?? "Friend"}</Text>
-            <Text style={styles.slogan}>Help together. Grow together.</Text>
+            <View style={styles.activeRow}>
+              <View style={styles.activeDot} />
+              <Text style={styles.activeText}>
+                {activeCount > 0
+                  ? `${activeCount} member${activeCount === 1 ? "" : "s"} active`
+                  : "Community online"}
+              </Text>
+            </View>
           </View>
           <UserAvatar name={user?.name ?? "U"} size={44} />
         </View>
@@ -809,6 +818,9 @@ const styles = StyleSheet.create({
   greetingSmall: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#64748B" },
   greetingName: { fontSize: 22, fontFamily: "Inter_700Bold", color: "#1E3A8A" },
   slogan: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#2563EB", marginTop: 2 },
+  activeRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 4 },
+  activeDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: "#10B981" },
+  activeText: { fontSize: 11, fontFamily: "Inter_500Medium", color: "#10B981" },
   headerRight: { flexDirection: "row", alignItems: "center", gap: 10, marginLeft: 12 },
   adminBtn: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20 },
   adminBtnText: { color: "#fff", fontSize: 12, fontFamily: "Inter_600SemiBold" },
