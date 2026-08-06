@@ -1,12 +1,9 @@
 /**
- * PresenceContext — real-time active user count.
+ * PresenceContext — real-time per-user presence (WhatsApp-style).
  *
- * How it works:
- *  • On login: writes presence/{uid} with lastSeen = now, online = true
- *  • Every 60 s: updates lastSeen so the doc stays fresh
- *  • On logout / unmount: marks online = false
- *  • Listener: watches the whole presence collection and counts docs
- *    whose lastSeen is within the last 5 minutes (client-side filter)
+ * Each user writes presence/{uid} on login and refreshes every 30 s.
+ * The listener builds a map so any screen can check isOnline(uid) or
+ * call lastSeenText(uid) to get "online", "last seen 2 min ago", etc.
  */
 import {
   collection,
@@ -28,47 +25,46 @@ import React, {
 import { AppState, AppStateStatus } from "react-native";
 import { auth, db } from "@/lib/firebase";
 
-const ACTIVE_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
-const HEARTBEAT_MS = 60 * 1000;          // 1 minute
+const ACTIVE_WINDOW_MS = 3 * 60 * 1000;  // 3 min → counts as "online"
+const HEARTBEAT_MS     = 30 * 1000;       // pulse every 30 s
+
+export interface PresenceEntry {
+  uid: string;
+  name: string;
+  online: boolean;       // explicitly set by the client
+  lastSeenMs: number;    // resolved to milliseconds
+}
 
 interface PresenceContextType {
   activeCount: number;
+  presenceMap: Record<string, PresenceEntry>;
+  isOnline: (uid: string) => boolean;
+  lastSeenText: (uid: string) => string;
 }
 
-const PresenceContext = createContext<PresenceContextType>({ activeCount: 0 });
+const PresenceContext = createContext<PresenceContextType>({
+  activeCount: 0,
+  presenceMap: {},
+  isOnline: () => false,
+  lastSeenText: () => "",
+});
 
 export function PresenceProvider({ children }: { children: React.ReactNode }) {
+  const [presenceMap, setPresenceMap] = useState<Record<string, PresenceEntry>>({});
   const [activeCount, setActiveCount] = useState(0);
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const uidRef = useRef<string | null>(null);
 
-  // ── write / refresh this user's presence ──────────────────────────────
-  const touchPresence = useCallback(
-    async (uid: string, name: string, online: boolean) => {
-      try {
-        await setDoc(
-          doc(db, "presence", uid),
-          { uid, name, lastSeen: serverTimestamp(), online },
-          { merge: true }
-        );
-      } catch {
-        // silently ignore — not critical
-      }
-    },
-    []
-  );
-
-  const startHeartbeat = useCallback(
-    (uid: string, name: string) => {
-      stopHeartbeat();
-      touchPresence(uid, name, true);
-      heartbeatRef.current = setInterval(
-        () => touchPresence(uid, name, true),
-        HEARTBEAT_MS
+  // ── write / refresh presence ──────────────────────────────────────────
+  const touchPresence = useCallback(async (uid: string, name: string, online: boolean) => {
+    try {
+      await setDoc(
+        doc(db, "presence", uid),
+        { uid, name, lastSeen: serverTimestamp(), online },
+        { merge: true }
       );
-    },
-    [touchPresence]
-  );
+    } catch { /* non-critical */ }
+  }, []);
 
   const stopHeartbeat = useCallback(() => {
     if (heartbeatRef.current) {
@@ -76,6 +72,12 @@ export function PresenceProvider({ children }: { children: React.ReactNode }) {
       heartbeatRef.current = null;
     }
   }, []);
+
+  const startHeartbeat = useCallback((uid: string, name: string) => {
+    stopHeartbeat();
+    touchPresence(uid, name, true);
+    heartbeatRef.current = setInterval(() => touchPresence(uid, name, true), HEARTBEAT_MS);
+  }, [touchPresence, stopHeartbeat]);
 
   // ── auth gate ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -86,35 +88,29 @@ export function PresenceProvider({ children }: { children: React.ReactNode }) {
         startHeartbeat(fbUser.uid, name);
       } else {
         if (uidRef.current) {
-          // mark offline on sign-out
-          updateDoc(doc(db, "presence", uidRef.current), { online: false }).catch(
-            () => {}
-          );
+          updateDoc(doc(db, "presence", uidRef.current), { online: false }).catch(() => {});
         }
         uidRef.current = null;
         stopHeartbeat();
+        setPresenceMap({});
         setActiveCount(0);
       }
     });
-
-    return () => {
-      unsubAuth();
-      stopHeartbeat();
-    };
+    return () => { unsubAuth(); stopHeartbeat(); };
   }, [startHeartbeat, stopHeartbeat]);
 
-  // ── pause heartbeat when app goes to background ───────────────────────
+  // ── app background / foreground ───────────────────────────────────────
   useEffect(() => {
     const sub = AppState.addEventListener("change", (state: AppStateStatus) => {
       if (!uidRef.current) return;
+      const name = auth.currentUser?.displayName ?? auth.currentUser?.email?.split("@")[0] ?? "User";
       if (state === "active") {
-        const name = auth.currentUser?.displayName ??
-          auth.currentUser?.email?.split("@")[0] ?? "User";
         startHeartbeat(uidRef.current, name);
       } else {
         stopHeartbeat();
-        // mark lastSeen so the window expires naturally while backgrounded
+        // write one final lastSeen so the window expires naturally
         updateDoc(doc(db, "presence", uidRef.current), {
+          online: false,
           lastSeen: serverTimestamp(),
         }).catch(() => {});
       }
@@ -122,35 +118,65 @@ export function PresenceProvider({ children }: { children: React.ReactNode }) {
     return () => sub.remove();
   }, [startHeartbeat, stopHeartbeat]);
 
-  // ── listen to presence collection & count active ──────────────────────
+  // ── live listener → build presenceMap ────────────────────────────────
   useEffect(() => {
-    const unsubSnap = onSnapshot(
+    const unsub = onSnapshot(
       collection(db, "presence"),
       (snap) => {
-        const cutoff = Date.now() - ACTIVE_WINDOW_MS;
+        const now = Date.now();
+        const cutoff = now - ACTIVE_WINDOW_MS;
+        const map: Record<string, PresenceEntry> = {};
         let count = 0;
+
         snap.docs.forEach((d) => {
           const data = d.data();
-          // lastSeen can be a Firestore Timestamp or ISO string
-          let ms: number | null = null;
-          if (data.lastSeen?.toMillis) {
-            ms = data.lastSeen.toMillis();
-          } else if (typeof data.lastSeen === "string") {
-            ms = new Date(data.lastSeen).getTime();
-          }
-          if (ms !== null && ms > cutoff) count++;
+          let ms = 0;
+          if (data.lastSeen?.toMillis) ms = data.lastSeen.toMillis();
+          else if (typeof data.lastSeen === "string") ms = new Date(data.lastSeen).getTime();
+
+          const isRecent = ms > cutoff;
+          const entry: PresenceEntry = {
+            uid: d.id,
+            name: data.name ?? "User",
+            online: data.online === true && isRecent,
+            lastSeenMs: ms,
+          };
+          map[d.id] = entry;
+          if (isRecent) count++;
         });
+
+        setPresenceMap(map);
         setActiveCount(count);
       },
-      () => {
-        // rules not yet updated — fail silently
-      }
+      () => { /* rules not yet published — silent */ }
     );
-    return () => unsubSnap();
+    return () => unsub();
   }, []);
 
+  // ── helpers ───────────────────────────────────────────────────────────
+  const isOnline = useCallback(
+    (uid: string) => presenceMap[uid]?.online === true,
+    [presenceMap]
+  );
+
+  const lastSeenText = useCallback(
+    (uid: string): string => {
+      const entry = presenceMap[uid];
+      if (!entry) return "";
+      if (entry.online) return "online";
+      const diffMs = Date.now() - entry.lastSeenMs;
+      if (diffMs < 60_000) return "last seen just now";
+      const mins = Math.floor(diffMs / 60_000);
+      if (mins < 60) return `last seen ${mins} min ago`;
+      const hrs = Math.floor(mins / 60);
+      if (hrs < 24) return `last seen ${hrs}h ago`;
+      return `last seen ${Math.floor(hrs / 24)}d ago`;
+    },
+    [presenceMap]
+  );
+
   return (
-    <PresenceContext.Provider value={{ activeCount }}>
+    <PresenceContext.Provider value={{ activeCount, presenceMap, isOnline, lastSeenText }}>
       {children}
     </PresenceContext.Provider>
   );

@@ -29,13 +29,13 @@ function formatTime(dateStr: string) {
   return d.toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
-function MessageBubble({ msg, isOwn }: { msg: ChatMessage; isOwn: boolean }) {
+function MessageBubble({ msg, isOwn, online }: { msg: ChatMessage; isOwn: boolean; online?: boolean }) {
   const colors = useColors();
   return (
     <View style={[styles.msgRow, isOwn && styles.msgRowOwn]}>
       {!isOwn && (
         <View style={styles.avatarCol}>
-          <UserAvatar name={msg.userName} size={32} />
+          <UserAvatar name={msg.userName} size={32} online={online} />
         </View>
       )}
       <View style={[styles.bubbleCol, isOwn && styles.bubbleColOwn]}>
@@ -64,7 +64,7 @@ export default function ChatScreen() {
   const colors = useColors();
   const { user } = useAuth();
   const { messages, sendMessage, loading, error } = useChat();
-  const { activeCount } = usePresence();
+  const { activeCount, isOnline, lastSeenText, presenceMap } = usePresence();
   const insets = useSafeAreaInsets();
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
@@ -122,12 +122,24 @@ export default function ChatScreen() {
               <View style={styles.onlineRow}>
                 <View style={styles.onlineDot} />
                 <Text style={styles.onlineText}>
-                  {activeCount > 0 ? `${activeCount} member${activeCount === 1 ? "" : "s"} active` : "Loading…"}
+                  {activeCount > 0
+                    ? `${activeCount} member${activeCount === 1 ? "" : "s"} active now`
+                    : "Community chat"}
                 </Text>
               </View>
             </View>
           </View>
-          <Feather name="users" size={20} color="rgba(255,255,255,0.6)" />
+          {/* Stacked online avatars */}
+          <View style={styles.onlineAvatarStack}>
+            {Object.values(presenceMap)
+              .filter((p) => p.online && p.uid !== user?.id)
+              .slice(0, 4)
+              .map((p, i) => (
+                <View key={p.uid} style={[styles.stackedAvatar, { marginLeft: i === 0 ? 0 : -8 }]}>
+                  <UserAvatar name={p.name} size={28} online />
+                </View>
+              ))}
+          </View>
         </View>
       </LinearGradient>
 
@@ -154,7 +166,7 @@ export default function ChatScreen() {
                   <View style={[styles.dateLine, { backgroundColor: colors.border }]} />
                 </View>
               )}
-              <MessageBubble msg={item} isOwn={isOwn} />
+              <MessageBubble msg={item} isOwn={isOwn} online={isOnline(item.userId)} />
             </>
           );
         }}
@@ -263,6 +275,15 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontFamily: "Inter_400Regular",
     color: "rgba(255,255,255,0.6)",
+  },
+  onlineAvatarStack: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  stackedAvatar: {
+    borderWidth: 2,
+    borderColor: "#0F4C75",
+    borderRadius: 14,
   },
   list: {
     paddingHorizontal: 16,

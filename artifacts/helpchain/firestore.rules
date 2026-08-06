@@ -3,52 +3,47 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Only signed-in users can access any data
     function isAuthed() {
       return request.auth != null;
     }
 
-    // User profiles — owner can write their own; anyone signed in can read
+    // User profiles
     match /users/{userId} {
       allow read: if isAuthed();
       allow write: if isAuthed() && request.auth.uid == userId;
     }
 
-    // Help requests — any signed-in user can read/create;
-    // only the requester or helper can update
+    // Help requests — all signed-in users can read & create; any signed-in user can update status
     match /requests/{requestId} {
       allow read: if isAuthed();
       allow create: if isAuthed();
       allow update: if isAuthed();
-      allow delete: if isAuthed()
-        && request.auth.uid == resource.data.requesterId;
+      allow delete: if isAuthed() && request.auth.uid == resource.data.requesterId;
     }
 
-    // Community chat — any signed-in user can read and post
+    // Community chat — all signed-in users can read; sender must match auth uid
     match /chat/{messageId} {
       allow read: if isAuthed();
-      allow create: if isAuthed()
-        && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if false; // messages are immutable
+      allow create: if isAuthed() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if false;
     }
 
-    // In-app notifications — any signed-in user can read;
-    // app writes on behalf of users (server-side)
+    // In-app notifications
     match /notifications/{notifId} {
       allow read: if isAuthed();
       allow create: if isAuthed();
-      allow update: if isAuthed(); // for marking read
+      allow update: if isAuthed();
       allow delete: if false;
     }
 
-    // Donations — any signed-in user can read and create
+    // Donations
     match /donations/{donationId} {
       allow read: if isAuthed();
       allow create: if isAuthed();
       allow update, delete: if false;
     }
 
-    // Presence — each user can write their own; anyone signed in can read all
+    // Presence — each user writes their own doc; everyone signed-in can read all
     match /presence/{userId} {
       allow read: if isAuthed();
       allow write: if isAuthed() && request.auth.uid == userId;
