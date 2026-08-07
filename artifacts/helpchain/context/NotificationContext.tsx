@@ -20,6 +20,7 @@ export type NotifType =
   | "completed"
   | "new_request"
   | "new_donation"
+  | "new_message"
   | "system";
 
 export interface AppNotification {

@@ -20,6 +20,7 @@ const NOTIF_META: Record<string, { icon: string; color: string }> = {
   completed:       { icon: "check-circle",    color: "#16A34A" },
   new_request:     { icon: "life-buoy",       color: "#0F766E" },
   new_donation:    { icon: "gift",            color: "#7C3AED" },
+  new_message:     { icon: "message-circle",  color: "#2563EB" },
   system:          { icon: "bell",            color: "#64748B" },
 };
 

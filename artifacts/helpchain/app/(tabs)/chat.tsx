@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { UserAvatar } from "@/components/UserAvatar";
 import { useAuth } from "@/context/AuthContext";
 import { ChatMessage, useChat } from "@/context/ChatContext";
+import { useNotifications } from "@/context/NotificationContext";
 import { usePresence } from "@/context/PresenceContext";
 import { useColors } from "@/hooks/useColors";
 
@@ -64,6 +65,7 @@ export default function ChatScreen() {
   const colors = useColors();
   const { user } = useAuth();
   const { messages, sendMessage, loading, error } = useChat();
+  const { addNotification } = useNotifications();
   const { activeCount, isOnline, lastSeenText, presenceMap } = usePresence();
   const insets = useSafeAreaInsets();
   const [text, setText] = useState("");
@@ -89,6 +91,13 @@ export default function ChatScreen() {
     setText("");
     try {
       await sendMessage(user.id, user.name, draft);
+      // Notify everyone else — sender is suppressed by NotificationContext (createdByUid check)
+      await addNotification({
+        title: user.name,
+        body: draft.length > 80 ? draft.slice(0, 77) + "…" : draft,
+        type: "new_message",
+        targetUserId: "all",
+      });
       setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
     } catch (e: any) {
       setText(draft); // restore so user doesn't lose message
