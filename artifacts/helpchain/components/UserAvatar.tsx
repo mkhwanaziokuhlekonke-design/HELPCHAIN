@@ -1,5 +1,5 @@
 import React from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Image, StyleSheet, Text, View } from "react-native";
 import { useColors } from "@/hooks/useColors";
 
 interface UserAvatarProps {
@@ -8,9 +8,11 @@ interface UserAvatarProps {
   isAdmin?: boolean;
   /** Show a WhatsApp-style online dot when true */
   online?: boolean;
+  /** Base64 data URI or remote URL — shown instead of initials when provided */
+  photoURL?: string;
 }
 
-export function UserAvatar({ name, size = 40, isAdmin = false, online }: UserAvatarProps) {
+export function UserAvatar({ name, size = 40, isAdmin = false, online, photoURL }: UserAvatarProps) {
   const colors = useColors();
   const initials = name
     .split(" ")
@@ -23,21 +25,36 @@ export function UserAvatar({ name, size = 40, isAdmin = false, online }: UserAva
 
   return (
     <View style={{ width: size, height: size }}>
-      <View
-        style={[
-          styles.avatar,
-          {
-            width: size,
-            height: size,
-            borderRadius: size / 2,
-            backgroundColor: isAdmin ? colors.accent : colors.primary,
-          },
-        ]}
-      >
-        <Text style={[styles.initials, { fontSize, color: colors.primaryForeground }]}>
-          {initials}
-        </Text>
-      </View>
+      {photoURL ? (
+        <Image
+          source={{ uri: photoURL }}
+          style={[
+            styles.avatar,
+            {
+              width: size,
+              height: size,
+              borderRadius: size / 2,
+            },
+          ]}
+          resizeMode="cover"
+        />
+      ) : (
+        <View
+          style={[
+            styles.avatar,
+            {
+              width: size,
+              height: size,
+              borderRadius: size / 2,
+              backgroundColor: isAdmin ? colors.accent : colors.primary,
+            },
+          ]}
+        >
+          <Text style={[styles.initials, { fontSize, color: colors.primaryForeground }]}>
+            {initials}
+          </Text>
+        </View>
+      )}
 
       {/* Online indicator dot — only rendered when online prop is provided */}
       {online !== undefined && (
@@ -64,6 +81,7 @@ const styles = StyleSheet.create({
   avatar: {
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
   },
   initials: {
     fontFamily: "Inter_700Bold",

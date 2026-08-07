@@ -23,10 +23,12 @@ const logo = require("@/assets/images/logo.jpeg");
 
 export default function AdminLoginScreen() {
   const colors = useColors();
-  const { login, allUsers } = useAuth();
+  const { login, signup, allUsers } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
+  const [mode, setMode] = useState<"login" | "register">("login");
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
@@ -45,7 +47,10 @@ export default function AdminLoginScreen() {
     setLoading(false);
 
     if (result.ok) {
-      // Check isAdmin from the Firestore profile (loaded into allUsers via onSnapshot)
+      // Allow a brief moment for the allUsers snapshot to populate
+      // then check admin status. If the profile is missing from allUsers
+      // yet (e.g. fresh account), the ADMIN_EMAILS list in AuthContext
+      // will still mark them as admin via onAuthStateChanged.
       const loggedIn = allUsers.find(
         (u) => u.email.toLowerCase() === email.trim().toLowerCase()
       );
@@ -61,6 +66,30 @@ export default function AdminLoginScreen() {
       Alert.alert("Access Denied", result.error ?? "Invalid admin credentials.");
     }
   }
+
+  async function handleAdminRegister() {
+    if (!name.trim() || !email.trim() || !password.trim()) {
+      Alert.alert("Error", "Please fill in all fields.");
+      return;
+    }
+    if (password.length < 6) {
+      Alert.alert("Error", "Password must be at least 6 characters.");
+      return;
+    }
+    setLoading(true);
+    const result = await signup(name.trim(), email.trim(), password);
+    setLoading(false);
+
+    if (result.ok) {
+      // After signup, go straight to the app — AuthContext marks the
+      // email as admin automatically if it's in ADMIN_EMAILS.
+      router.replace("/(tabs)" as any);
+    } else {
+      Alert.alert("Registration Failed", result.error ?? "Could not create account.");
+    }
+  }
+
+  const isLogin = mode === "login";
 
   return (
     <KeyboardAvoidingView
@@ -92,14 +121,60 @@ export default function AdminLoginScreen() {
         contentContainerStyle={[styles.form, { paddingBottom: bottomPad + 24 }]}
         keyboardShouldPersistTaps="handled"
       >
+        {/* Mode toggle tabs */}
+        <View style={[styles.tabRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          {(["login", "register"] as const).map((m) => (
+            <Pressable
+              key={m}
+              onPress={() => setMode(m)}
+              style={[
+                styles.tab,
+                mode === m && { backgroundColor: "#0F766E" },
+              ]}
+            >
+              <Feather
+                name={m === "login" ? "log-in" : "user-plus"}
+                size={14}
+                color={mode === m ? "#fff" : colors.mutedForeground}
+              />
+              <Text style={[styles.tabText, { color: mode === m ? "#fff" : colors.mutedForeground }]}>
+                {m === "login" ? "Sign In" : "Create Account"}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+
         <View style={[styles.warningBanner, { backgroundColor: "#FFF7ED", borderColor: "#F59E0B" }]}>
           <Feather name="alert-triangle" size={16} color="#D97706" />
           <Text style={[styles.warningText, { color: "#92400E" }]}>
-            This is a restricted admin portal. Only authorised admins may sign in here.
+            {isLogin
+              ? "This is a restricted admin portal. Only authorised admins may sign in here."
+              : "Create an admin account. Your email must be on the authorised admin list."}
           </Text>
         </View>
 
-        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Admin Sign In</Text>
+        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
+          {isLogin ? "Admin Sign In" : "Create Admin Account"}
+        </Text>
+
+        {/* Name field — register only */}
+        {!isLogin && (
+          <View style={styles.inputGroup}>
+            <Text style={[styles.label, { color: colors.mutedForeground }]}>Full Name</Text>
+            <View style={[styles.inputWrapper, { borderColor: colors.border, backgroundColor: colors.card }]}>
+              <Feather name="user" size={16} color={colors.mutedForeground} />
+              <TextInput
+                style={[styles.input, { color: colors.foreground }]}
+                placeholder="Your full name"
+                placeholderTextColor={colors.mutedForeground}
+                value={name}
+                onChangeText={setName}
+                autoCapitalize="words"
+                autoCorrect={false}
+              />
+            </View>
+          </View>
+        )}
 
         <View style={styles.inputGroup}>
           <Text style={[styles.label, { color: colors.mutedForeground }]}>Admin Email</Text>
@@ -137,7 +212,7 @@ export default function AdminLoginScreen() {
         </View>
 
         <Pressable
-          onPress={handleAdminLogin}
+          onPress={isLogin ? handleAdminLogin : handleAdminRegister}
           disabled={loading}
           style={({ pressed }) => [
             styles.button,
@@ -148,13 +223,15 @@ export default function AdminLoginScreen() {
             <ActivityIndicator color="#fff" />
           ) : (
             <>
-              <Feather name="shield" size={18} color="#fff" />
-              <Text style={styles.buttonText}>Sign In as Admin</Text>
+              <Feather name={isLogin ? "shield" : "user-plus"} size={18} color="#fff" />
+              <Text style={styles.buttonText}>
+                {isLogin ? "Sign In as Admin" : "Create Admin Account"}
+              </Text>
             </>
           )}
         </Pressable>
 
-        <Pressable onPress={() => router.back()} style={styles.backLink}>
+        <Pressable onPress={() => router.replace("/(auth)/portal" as any)} style={styles.backLink}>
           <Feather name="arrow-left" size={14} color={colors.mutedForeground} />
           <Text style={[styles.backLinkText, { color: colors.mutedForeground }]}>
             Back to portal
@@ -224,6 +301,27 @@ const styles = StyleSheet.create({
     padding: 24,
     gap: 16,
   },
+  tabRow: {
+    flexDirection: "row",
+    borderRadius: 12,
+    borderWidth: 1,
+    overflow: "hidden",
+    padding: 4,
+    gap: 4,
+  },
+  tab: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 9,
+  },
+  tabText: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
+  },
   warningBanner: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -258,14 +356,6 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     fontFamily: "Inter_400Regular",
-  },
-  demoHint: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    padding: 12,
-    borderRadius: 10,
-    borderWidth: 1,
   },
   button: {
     height: 54,

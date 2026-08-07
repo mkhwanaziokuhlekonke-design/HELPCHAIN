@@ -27,6 +27,7 @@ export interface User {
   createdAt: string;
   requestsCreated: number;
   helpOffered: number;
+  photoURL?: string;
 }
 
 interface AuthContextType {
@@ -39,11 +40,12 @@ interface AuthContextType {
   logout: () => Promise<void>;
   setLocationGranted: (val: boolean) => void;
   updateUserStats: (userId: string, field: "requestsCreated" | "helpOffered") => void;
+  updateProfilePhoto: (photoURL: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-const ADMIN_EMAILS = ["admin@helpchain.com"];
+const ADMIN_EMAILS = ["admin@helpchain.com", "fxgroot05@gmail.com"];
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -213,6 +215,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  async function updateProfilePhoto(photoURL: string) {
+    if (!user) return;
+    try {
+      await updateDoc(doc(db, "users", user.id), { photoURL });
+      setUser((prev) => prev ? { ...prev, photoURL } : prev);
+    } catch (e) {
+      console.error("updateProfilePhoto error", e);
+      throw e;
+    }
+  }
+
   async function logout() {
     await signOut(auth);
     setUser(null);
@@ -253,6 +266,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         logout,
         setLocationGranted,
         updateUserStats,
+        updateProfilePhoto,
       }}
     >
       {children}
