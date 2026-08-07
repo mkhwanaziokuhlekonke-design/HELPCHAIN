@@ -19,6 +19,7 @@ import { AuthProvider } from "@/context/AuthContext";
 import { ChatProvider } from "@/context/ChatContext";
 import { DonationProvider } from "@/context/DonationContext";
 import { HelpProvider } from "@/context/HelpContext";
+import { LocationProvider } from "@/context/LocationContext";
 import { NotificationProvider } from "@/context/NotificationContext";
 import { PresenceProvider } from "@/context/PresenceContext";
 
@@ -65,12 +66,14 @@ export default function RootLayout() {
                 <DonationProvider>
                   <NotificationProvider>
                     <PresenceProvider>
-                      <GestureHandlerRootView style={{ flex: 1 }}>
-                        <KeyboardProvider>
-                          <RootLayoutNav />
-                        </KeyboardProvider>
-                        <NotifToast />
-                      </GestureHandlerRootView>
+                      <LocationProvider>
+                        <GestureHandlerRootView style={{ flex: 1 }}>
+                          <KeyboardProvider>
+                            <RootLayoutNav />
+                          </KeyboardProvider>
+                          <NotifToast />
+                        </GestureHandlerRootView>
+                      </LocationProvider>
                     </PresenceProvider>
                   </NotificationProvider>
                 </DonationProvider>
