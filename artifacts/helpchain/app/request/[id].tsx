@@ -3,6 +3,7 @@ import React, { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -15,9 +16,11 @@ import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CategoryBadge } from "@/components/CategoryBadge";
+import { NavigationMap } from "@/components/NavigationMap";
 import { UserAvatar } from "@/components/UserAvatar";
 import { useAuth } from "@/context/AuthContext";
 import { useHelp } from "@/context/HelpContext";
+import { useLocation } from "@/context/LocationContext";
 import { useNotifications } from "@/context/NotificationContext";
 import { useColors } from "@/hooks/useColors";
 
@@ -44,9 +47,11 @@ export default function RequestDetailScreen() {
   const { getRequestById, offerHelp, completeRequest, cancelRequest } = useHelp();
   const { user, updateUserStats } = useAuth();
   const { addNotification } = useNotifications();
+  const { myCoords } = useLocation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(false);
+  const [showNavMap, setShowNavMap] = useState(false);
 
   const request = getRequestById(id);
   const topPad = Platform.OS === "web" ? 67 : insets.top;
@@ -89,6 +94,8 @@ export default function RequestDetailScreen() {
             requestId: request!.id,
           });
           setLoading(false);
+          // Auto-open navigation if the request has a pinned location
+          if (request!.location) setShowNavMap(true);
         },
       },
     ]);
@@ -209,6 +216,73 @@ export default function RequestDetailScreen() {
             </View>
           </View>
         )}
+
+        {/* ── Navigation card — visible when this user is the helper ── */}
+        {isHelper && request.status === "accepted" && request.location && (
+          <View style={[styles.navCard, { borderColor: "#2563EB30" }]}>
+            {/* Header row */}
+            <View style={styles.navCardHeader}>
+              <View style={styles.navLiveDot} />
+              <Text style={styles.navCardTitle}>Navigate to {request.requesterName}</Text>
+              <Pressable
+                onPress={() => setShowNavMap(true)}
+                style={styles.expandBtn}
+                hitSlop={8}
+              >
+                <Feather name="maximize-2" size={16} color="#2563EB" />
+              </Pressable>
+            </View>
+
+            {/* Embedded mini map */}
+            <View style={styles.miniMapWrap}>
+              <NavigationMap
+                requesterCoords={request.location}
+                requesterName={request.requesterName}
+                requesterAddress={request.location.address}
+              />
+            </View>
+
+            {/* Distance / ETA row */}
+            {myCoords && (() => {
+              const km = Math.sqrt(
+                ((myCoords.latitude - request.location!.latitude) * 111) ** 2 +
+                ((myCoords.longitude - request.location!.longitude) * 111 * Math.cos(myCoords.latitude * Math.PI / 180)) ** 2
+              );
+              const mins = Math.round((km / 30) * 60);
+              return (
+                <View style={styles.distRow}>
+                  <Feather name="navigation" size={14} color="#2563EB" />
+                  <Text style={styles.distText}>
+                    {km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(1)} km`}
+                    {" · "}
+                    {mins < 1 ? "< 1 min" : mins < 60 ? `${mins} min` : `${Math.floor(mins / 60)}h ${mins % 60}m`} away
+                  </Text>
+                  <Pressable onPress={() => setShowNavMap(true)} style={styles.fullNavBtn}>
+                    <Text style={styles.fullNavBtnText}>Full Map</Text>
+                  </Pressable>
+                </View>
+              );
+            })()}
+          </View>
+        )}
+
+        {/* ── Full-screen navigation modal ── */}
+        <Modal
+          visible={showNavMap && !!request.location}
+          animationType="slide"
+          statusBarTranslucent
+          onRequestClose={() => setShowNavMap(false)}
+        >
+          {request.location && (
+            <NavigationMap
+              requesterCoords={request.location}
+              requesterName={request.requesterName}
+              requesterAddress={request.location.address}
+              fullScreen
+              onClose={() => setShowNavMap(false)}
+            />
+          )}
+        </Modal>
 
         <View style={styles.actions}>
           {canOffer && (
@@ -386,6 +460,72 @@ const styles = StyleSheet.create({
   },
   actionBtnOutlineText: {
     fontSize: 15,
+    fontFamily: "Inter_600SemiBold",
+  },
+  // ── Navigation card ──────────────────────────────────────────────────
+  navCard: {
+    borderRadius: 16,
+    borderWidth: 1.5,
+    backgroundColor: "#EFF6FF",
+    overflow: "hidden",
+  },
+  navCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    paddingBottom: 10,
+  },
+  navLiveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#22C55E",
+  },
+  navCardTitle: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+    color: "#1E3A8A",
+  },
+  expandBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: "#DBEAFE",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  miniMapWrap: {
+    marginHorizontal: 12,
+    marginBottom: 0,
+    borderRadius: 12,
+    overflow: "hidden",
+    height: 200,
+  },
+  distRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  distText: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: "Inter_500Medium",
+    color: "#1E40AF",
+  },
+  fullNavBtn: {
+    backgroundColor: "#2563EB",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
+  fullNavBtnText: {
+    color: "#fff",
+    fontSize: 12,
     fontFamily: "Inter_600SemiBold",
   },
 });
