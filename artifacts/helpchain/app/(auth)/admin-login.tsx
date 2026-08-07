@@ -71,7 +71,7 @@ export default function AdminLoginScreen() {
         colors={["#0F172A", "#0F766E", "#14B8A6"]}
         style={[styles.header, { paddingTop: topPad + 16 }]}
       >
-        <Pressable onPress={() => router.back()} style={styles.backBtn}>
+        <Pressable onPress={() => router.replace("/(auth)/portal" as any)} style={styles.backBtn}>
           <Feather name="arrow-left" size={22} color="rgba(255,255,255,0.8)" />
         </Pressable>
 

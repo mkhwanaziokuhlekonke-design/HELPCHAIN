@@ -118,7 +118,7 @@ export default function UserLoginScreen() {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <LinearGradient colors={["#1F2937", "#2563EB"]} style={[styles.header, { paddingTop: topPad + 16 }]}>
-        <Pressable onPress={() => router.back()} style={styles.backBtn}>
+        <Pressable onPress={() => router.replace("/(auth)/portal" as any)} style={styles.backBtn}>
           <Feather name="arrow-left" size={22} color="rgba(255,255,255,0.8)" />
         </Pressable>
         <View style={styles.headerContent}>
