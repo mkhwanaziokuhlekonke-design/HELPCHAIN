@@ -1,25 +1,27 @@
 /**
  * AdminActivityMap — admin-only live activity map.
  *
- * Renders a Leaflet map showing:
- *  • Blue dot  → each online user's GPS position (LocationContext)
- *  • Coloured pin → each geolocated help request (HelpContext)
- *      red pulsing   = emergency (isEmergency: true)
+ * Renders a Leaflet map showing three live layers:
+ *  • Blue dot    → each online user's GPS position   (LocationContext)
+ *  • Coloured pin → each geolocated help request      (HelpContext)
+ *      red pulsing   = emergency
  *      amber         = open
  *      teal          = accepted / in-progress
  *      grey          = completed
+ *  • Gold 🎁 pin  → donor's location at time of donation (DonationContext)
  *
- * Updates push via postMessage / injectJavaScript without re-mounting the map.
+ * All layers update via postMessage / injectJavaScript without re-mounting.
  */
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Platform, View, Text, StyleSheet } from "react-native";
+import { Platform, View, StyleSheet } from "react-native";
 import { useLocation } from "@/context/LocationContext";
 import { useHelp, HelpRequest } from "@/context/HelpContext";
+import { useDonations } from "@/context/DonationContext";
 
-// ── Constants ─────────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
-const USER_COLOR = "#3B82F6"; // blue dot for every online user
+const USER_COLOR = "#3B82F6";
 
 const CATEGORY_EMOJI: Record<string, string> = {
   emergency: "🚨",
@@ -34,10 +36,10 @@ function requestFill(r: HelpRequest): string {
   if (r.isEmergency) return "#EF4444";
   if (r.status === "accepted") return "#14B8A6";
   if (r.status === "completed") return "#94A3B8";
-  return "#F59E0B"; // open
+  return "#F59E0B";
 }
 
-// ── Leaflet HTML (embedded as a string, no external assets) ──────────────────
+// ── Embedded Leaflet HTML ─────────────────────────────────────────────────────
 
 const MAP_HTML = `<!DOCTYPE html>
 <html>
@@ -65,7 +67,8 @@ const MAP_HTML = `<!DOCTYPE html>
 var map = L.map('map',{zoomControl:true,attributionControl:false}).setView([51.505,-0.09],13);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
 
-var uMarkers={}, rMarkers={}, hasView=false;
+var uMarkers={}, rMarkers={}, dMarkers={};
+var hasView=false;
 var nd=document.getElementById('nodata');
 function hideND(){if(nd)nd.style.display='none';}
 
@@ -93,7 +96,7 @@ function renderUsers(users){
   });
 }
 
-/* ── Request markers (larger coloured pins) ── */
+/* ── Request markers (coloured pins by status) ── */
 function renderRequests(reqs){
   Object.keys(rMarkers).forEach(function(id){
     if(!reqs.find(function(r){return r.id===id;})){
@@ -123,11 +126,42 @@ function renderRequests(reqs){
   });
 }
 
-/* ── Message handler ── */
+/* ── Donation markers (gold gift pins) ── */
+function renderDonations(donations){
+  Object.keys(dMarkers).forEach(function(id){
+    if(!donations.find(function(d){return d.id===id;})){
+      map.removeLayer(dMarkers[id]);delete dMarkers[id];
+    }
+  });
+  donations.forEach(function(d){
+    if(dMarkers[d.id]){
+      dMarkers[d.id].setLatLng([d.lat,d.lng]);
+    } else {
+      var icon=L.divIcon({
+        className:'',
+        html:'<div style="position:relative;width:34px;height:34px;display:flex;align-items:center;justify-content:center;">'
+          +'<div style="width:28px;height:28px;background:#F59E0B;border:2.5px solid #fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;box-shadow:0 2px 8px rgba(245,158,11,.5);">🎁</div>'
+          +'</div>',
+        iconSize:[34,34],iconAnchor:[17,17]
+      });
+      dMarkers[d.id]=L.marker([d.lat,d.lng],{icon:icon,zIndexOffset:150}).addTo(map)
+        .bindPopup(
+          '<b>'+d.donorName+'</b><br>'
+          +'<span style="color:#64748B;font-size:11px">Donated '+d.quantity+'× '+d.itemType+'</span>'
+          +(d.address?'<br><span style="color:#94A3B8;font-size:10px">'+d.address+'</span>':'')
+        );
+    }
+    if(!hasView){map.setView([d.lat,d.lng],13);hasView=true;}
+    hideND();
+  });
+}
+
+/* ── Message dispatch ── */
 function onMsg(data){
   if(!data)return;
   if(data.type==='UPDATE_LOCATIONS')renderUsers(data.users||[]);
   if(data.type==='UPDATE_REQUESTS')renderRequests(data.requests||[]);
+  if(data.type==='UPDATE_DONATIONS')renderDonations(data.donations||[]);
 }
 function handle(e){
   try{var d=typeof e.data==='string'?JSON.parse(e.data):e.data;onMsg(d);}catch(err){}
@@ -147,12 +181,13 @@ interface AdminActivityMapProps {
 export function AdminActivityMap({ height = 300 }: AdminActivityMapProps) {
   const { userLocations } = useLocation();
   const { requests } = useHelp();
+  const { donations } = useDonations();
 
   const iframeRef = useRef<any>(null);
   const webViewRef = useRef<any>(null);
   const [ready, setReady] = useState(false);
 
-  // Build serialised payloads
+  // ── Payload builders ───────────────────────────────────────────────
   const locationPayload = useCallback(() => {
     const users = userLocations.map((u) => ({
       uid: u.uid,
@@ -180,7 +215,22 @@ export function AdminActivityMap({ height = 300 }: AdminActivityMapProps) {
     return JSON.stringify({ type: "UPDATE_REQUESTS", requests: reqs });
   }, [requests]);
 
-  // Push data to the embedded map
+  const donationsPayload = useCallback(() => {
+    const items = donations
+      .filter((d) => d.location)
+      .map((d) => ({
+        id: d.id,
+        donorName: d.donorName,
+        itemType: d.itemType,
+        quantity: d.quantity,
+        lat: d.location!.latitude,
+        lng: d.location!.longitude,
+        address: d.location?.address ?? "",
+      }));
+    return JSON.stringify({ type: "UPDATE_DONATIONS", donations: items });
+  }, [donations]);
+
+  // ── Push to embedded Leaflet ───────────────────────────────────────
   function push(payload: string) {
     if (Platform.OS === "web") {
       try {
@@ -205,24 +255,18 @@ export function AdminActivityMap({ height = 300 }: AdminActivityMapProps) {
     setTimeout(() => {
       push(locationPayload());
       push(requestsPayload());
+      push(donationsPayload());
     }, 350);
   }
 
-  // Live user location updates
-  useEffect(() => {
-    if (!ready) return;
-    push(locationPayload());
-  }, [userLocations, ready]);
+  useEffect(() => { if (ready) push(locationPayload()); }, [userLocations, ready]);
+  useEffect(() => { if (ready) push(requestsPayload()); }, [requests, ready]);
+  useEffect(() => { if (ready) push(donationsPayload()); }, [donations, ready]);
 
-  // Live request updates
-  useEffect(() => {
-    if (!ready) return;
-    push(requestsPayload());
-  }, [requests, ready]);
-
+  // ── Web render (iframe) ────────────────────────────────────────────
   if (Platform.OS === "web") {
     return (
-      <View style={[styles.mapContainer, { height }]}>
+      <View style={[styles.container, { height }]}>
         <iframe
           ref={iframeRef}
           srcDoc={MAP_HTML}
@@ -234,10 +278,10 @@ export function AdminActivityMap({ height = 300 }: AdminActivityMapProps) {
     );
   }
 
-  // Native — requires react-native-webview
+  // ── Native render (WebView) ────────────────────────────────────────
   const { WebView } = require("react-native-webview");
   return (
-    <View style={[styles.mapContainer, { height }]}>
+    <View style={[styles.container, { height }]}>
       <WebView
         ref={webViewRef}
         source={{ html: MAP_HTML }}
@@ -252,7 +296,7 @@ export function AdminActivityMap({ height = 300 }: AdminActivityMapProps) {
 }
 
 const styles = StyleSheet.create({
-  mapContainer: {
+  container: {
     borderRadius: 12,
     overflow: "hidden",
     backgroundColor: "#E2E8F0",

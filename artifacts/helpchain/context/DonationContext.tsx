@@ -10,6 +10,12 @@ import { onAuthStateChanged } from "firebase/auth";
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { auth, db } from "@/lib/firebase";
 
+export interface DonationLocation {
+  latitude: number;
+  longitude: number;
+  address?: string;
+}
+
 export interface Donation {
   id: string;
   donorId: string;
@@ -19,6 +25,8 @@ export interface Donation {
   quantity: number;
   description?: string;
   createdAt: string;
+  /** GPS position of the donor at the time of donation (optional — only set when permission granted) */
+  location?: DonationLocation;
 }
 
 interface DonationContextType {
@@ -29,7 +37,8 @@ interface DonationContextType {
     itemType: string,
     itemIcon: string,
     quantity: number,
-    description?: string
+    description?: string,
+    location?: DonationLocation
   ) => Promise<void>;
   totalItems: number;
 }
@@ -69,7 +78,8 @@ export function DonationProvider({ children }: { children: React.ReactNode }) {
     itemType: string,
     itemIcon: string,
     quantity: number,
-    description?: string
+    description?: string,
+    location?: DonationLocation
   ) {
     try {
       await addDoc(collection(db, "donations"), {
@@ -79,6 +89,7 @@ export function DonationProvider({ children }: { children: React.ReactNode }) {
         itemIcon,
         quantity,
         description: description ?? "",
+        ...(location ? { location } : {}),
         createdAt: new Date().toISOString(),
         _serverTs: serverTimestamp(),
       });

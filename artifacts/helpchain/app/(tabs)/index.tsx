@@ -18,6 +18,7 @@ import {
 import { Feather } from "@expo/vector-icons";
 import Svg, { Circle, Path, Line as SvgLine, Text as SvgText, G } from "react-native-svg";
 import * as Haptics from "expo-haptics";
+import * as Location from "expo-location";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { UserAvatar } from "@/components/UserAvatar";
 import { LiveLocationMap } from "@/components/LiveLocationMap";
@@ -720,7 +721,35 @@ export default function HomeScreen() {
                     setSelectedQty(null);
                     setDonateNote("");
                     try {
-                      await addDonation(user.id, user.name, itemSnapshot.type, itemSnapshot.icon, qty, noteSnapshot || undefined);
+                      // ── Capture donor GPS (best-effort — donation proceeds even if denied) ──
+                      let donorLocation: { latitude: number; longitude: number; address?: string } | undefined;
+                      try {
+                        const { status } = await Location.requestForegroundPermissionsAsync();
+                        if (status === "granted") {
+                          const pos = await Location.getCurrentPositionAsync({
+                            accuracy: Location.Accuracy.Balanced,
+                          });
+                          let address: string | undefined;
+                          try {
+                            const geo = await Location.reverseGeocodeAsync({
+                              latitude: pos.coords.latitude,
+                              longitude: pos.coords.longitude,
+                            });
+                            if (geo[0]) {
+                              const g = geo[0];
+                              address = [g.name, g.street, g.city, g.region]
+                                .filter(Boolean)
+                                .join(", ");
+                            }
+                          } catch {}
+                          donorLocation = {
+                            latitude: pos.coords.latitude,
+                            longitude: pos.coords.longitude,
+                            address,
+                          };
+                        }
+                      } catch {}
+                      await addDonation(user.id, user.name, itemSnapshot.type, itemSnapshot.icon, qty, noteSnapshot || undefined, donorLocation);
                       Alert.alert(
                         "Thank you! 🙏",
                         `Your donation of ${qty} ${itemSnapshot.type} item${qty !== 1 ? "s" : ""} has been registered. Our team will contact you for pickup.`
