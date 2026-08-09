@@ -24,6 +24,8 @@ import { useAuth } from "@/context/AuthContext";
 import { useChat } from "@/context/ChatContext";
 import { useDonations } from "@/context/DonationContext";
 import { useHelp } from "@/context/HelpContext";
+import { useLocation } from "@/context/LocationContext";
+import { AdminActivityMap } from "@/components/AdminActivityMap";
 
 const logo = require("@/assets/images/logo.jpeg");
 
@@ -221,6 +223,7 @@ export default function AdminScreen() {
   const { requests } = useHelp();
   const { donations, totalItems } = useDonations();
   const { messages } = useChat();
+  const { userLocations } = useLocation();
 
   const [section, setSection] = useState<Section>("dashboard");
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -831,32 +834,161 @@ export default function AdminScreen() {
           </View>
         )}
 
-        {section === "location" && (
-          <View style={{ padding: 14, gap: 14 }}>
-            <View style={styles.card}>
-              <Text style={[styles.cardTitle, { marginBottom: 10 }]}>Live Location Map</Text>
-              <AdminMapView />
-            </View>
-            <View style={styles.card}>
-              <Text style={[styles.cardTitle, { marginBottom: 10 }]}>Recent Location Activity</Text>
-              {requests.filter((r) => r.location).map((r) => (
-                <View key={r.id} style={styles.requestRow}>
-                  <Feather name="map-pin" size={16} color={BLUE_LIGHT} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.requestName} numberOfLines={1}>{r.title}</Text>
-                    <Text style={styles.requestLoc}>{r.location?.address}</Text>
+        {section === "location" && (() => {
+          // ── Derived live stats ──────────────────────────────────────────
+          const onlineCount = userLocations.length;
+          const openReqs = requests.filter((r) => r.status === "open" || r.status === "accepted");
+          const emergencyReqs = requests.filter((r) => r.isEmergency && r.status !== "completed" && r.status !== "cancelled");
+          const geoReqs = requests.filter((r) => r.location && r.status !== "cancelled");
+
+          // ── Combined activity feed: requests + donations, newest first ──
+          type ActivityItem =
+            | { kind: "request"; id: string; title: string; status: string; isEmergency: boolean; category: string; location?: { address?: string }; time: string }
+            | { kind: "donation"; id: string; donorName: string; itemType: string; itemIcon: string; quantity: number; time: string };
+
+          const feedItems: ActivityItem[] = [
+            ...requests.map((r) => ({
+              kind: "request" as const,
+              id: r.id,
+              title: r.title,
+              status: r.status,
+              isEmergency: r.isEmergency,
+              category: r.category,
+              location: r.location,
+              time: r.createdAt,
+            })),
+            ...donations.map((d) => ({
+              kind: "donation" as const,
+              id: d.id,
+              donorName: d.donorName,
+              itemType: d.itemType,
+              itemIcon: d.itemIcon,
+              quantity: d.quantity,
+              time: d.createdAt,
+            })),
+          ]
+            .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
+            .slice(0, 25);
+
+          const statChips = [
+            { label: "Online", value: onlineCount, color: "#10B981", icon: "radio" as const },
+            { label: "Active", value: openReqs.length, color: BLUE_LIGHT, icon: "activity" as const },
+            { label: "Emergency", value: emergencyReqs.length, color: "#EF4444", icon: "alert-circle" as const },
+            { label: "Geolocated", value: geoReqs.length, color: "#F59E0B", icon: "map-pin" as const },
+          ];
+
+          return (
+            <View style={{ padding: 14, gap: 14 }}>
+              {/* ── Live stats strip ─────────────────────────────────── */}
+              <View style={{ flexDirection: "row", gap: 8 }}>
+                {statChips.map((chip) => (
+                  <View
+                    key={chip.label}
+                    style={[styles.card, { flex: 1, alignItems: "center", paddingVertical: 10, paddingHorizontal: 4, gap: 4 }]}
+                  >
+                    <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: chip.color + "18", alignItems: "center", justifyContent: "center" }}>
+                      <Feather name={chip.icon} size={13} color={chip.color} />
+                    </View>
+                    <Text style={{ fontSize: 18, fontFamily: "Inter_700Bold", color: "#1E293B" }}>{chip.value}</Text>
+                    <Text style={{ fontSize: 9, fontFamily: "Inter_400Regular", color: "#94A3B8", textAlign: "center" }}>{chip.label}</Text>
                   </View>
-                  <Text style={styles.reportTime}>{timeAgo(r.createdAt)}</Text>
+                ))}
+              </View>
+
+              {/* ── Live map legend ───────────────────────────────────── */}
+              <View style={styles.card}>
+                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                  <Text style={styles.cardTitle}>Live Activity Map</Text>
+                  {/* Live badge */}
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "#FEF2F2", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 }}>
+                    <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: "#EF4444" }} />
+                    <Text style={{ fontSize: 10, fontFamily: "Inter_600SemiBold", color: "#EF4444" }}>LIVE</Text>
+                  </View>
                 </View>
-              ))}
-              {requests.filter((r) => r.location).length === 0 && (
-                <Text style={{ color: "#94A3B8", textAlign: "center", paddingVertical: 20, fontFamily: "Inter_400Regular" }}>
-                  No location data yet
-                </Text>
-              )}
+
+                {/* Map */}
+                <AdminActivityMap height={320} />
+
+                {/* Legend */}
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: "#F1F5F9" }}>
+                  {[
+                    { color: "#3B82F6", label: "User online" },
+                    { color: "#EF4444", label: "Emergency" },
+                    { color: "#F59E0B", label: "Open request" },
+                    { color: "#14B8A6", label: "Being helped" },
+                    { color: "#94A3B8", label: "Completed" },
+                  ].map((l) => (
+                    <View key={l.label} style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                      <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: l.color }} />
+                      <Text style={{ fontSize: 10, fontFamily: "Inter_400Regular", color: "#64748B" }}>{l.label}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+
+              {/* ── Combined activity feed ───────────────────────────── */}
+              <View style={styles.card}>
+                <Text style={[styles.cardTitle, { marginBottom: 10 }]}>Live Activity Feed</Text>
+
+                {feedItems.length === 0 && (
+                  <Text style={{ color: "#94A3B8", textAlign: "center", paddingVertical: 20, fontFamily: "Inter_400Regular", fontSize: 13 }}>
+                    No activity yet
+                  </Text>
+                )}
+
+                {feedItems.map((item) => {
+                  if (item.kind === "request") {
+                    const statusColor =
+                      item.isEmergency ? "#EF4444"
+                      : item.status === "accepted" ? "#14B8A6"
+                      : item.status === "completed" ? "#94A3B8"
+                      : "#F59E0B";
+                    const statusLabel =
+                      item.status === "accepted" ? "Being helped"
+                      : item.status === "completed" ? "Completed"
+                      : item.status === "cancelled" ? "Cancelled"
+                      : "Open";
+                    return (
+                      <View key={item.id} style={[styles.requestRow, { alignItems: "flex-start" }]}>
+                        <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: statusColor + "18", alignItems: "center", justifyContent: "center", marginTop: 1 }}>
+                          <Feather name={item.isEmergency ? "alert-circle" : "map-pin"} size={13} color={statusColor} />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.requestName} numberOfLines={1}>{item.title}</Text>
+                          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 2 }}>
+                            <View style={{ backgroundColor: statusColor + "18", paddingHorizontal: 6, paddingVertical: 1, borderRadius: 6 }}>
+                              <Text style={{ fontSize: 9, fontFamily: "Inter_600SemiBold", color: statusColor }}>{statusLabel}</Text>
+                            </View>
+                            {item.location?.address && (
+                              <Text style={[styles.requestLoc, { flex: 1 }]} numberOfLines={1}>{item.location.address}</Text>
+                            )}
+                          </View>
+                        </View>
+                        <Text style={styles.reportTime}>{timeAgo(item.time)}</Text>
+                      </View>
+                    );
+                  }
+
+                  // Donation row
+                  return (
+                    <View key={item.id} style={[styles.requestRow, { alignItems: "flex-start" }]}>
+                      <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: "#FEF3C718", alignItems: "center", justifyContent: "center", marginTop: 1 }}>
+                        <Text style={{ fontSize: 13 }}>{item.itemIcon}</Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.requestName} numberOfLines={1}>
+                          {item.donorName} donated {item.quantity}× {item.itemType}
+                        </Text>
+                        <Text style={[styles.requestLoc, { marginTop: 2 }]}>Donation</Text>
+                      </View>
+                      <Text style={styles.reportTime}>{timeAgo(item.time)}</Text>
+                    </View>
+                  );
+                })}
+              </View>
             </View>
-          </View>
-        )}
+          );
+        })()}
 
         {section === "analytics" && (
           <View style={{ padding: 14, gap: 14 }}>
