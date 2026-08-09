@@ -7,6 +7,7 @@ import {
 } from "firebase/auth";
 import {
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -24,6 +25,7 @@ export interface User {
   email: string;
   phone: string;
   isAdmin: boolean;
+  suspended?: boolean;
   createdAt: string;
   requestsCreated: number;
   helpOffered: number;
@@ -41,6 +43,9 @@ interface AuthContextType {
   setLocationGranted: (val: boolean) => void;
   updateUserStats: (userId: string, field: "requestsCreated" | "helpOffered") => void;
   updateProfilePhoto: (photoURL: string) => Promise<void>;
+  toggleAdminRole: (userId: string) => Promise<void>;
+  suspendUser: (userId: string, suspend: boolean) => Promise<void>;
+  deleteUserFromFirestore: (userId: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -215,6 +220,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  async function toggleAdminRole(userId: string) {
+    try {
+      const ref = doc(db, "users", userId);
+      const snap = await getDoc(ref);
+      if (!snap.exists()) return;
+      const current = (snap.data() as User).isAdmin ?? false;
+      await updateDoc(ref, { isAdmin: !current });
+      setAllUsers((prev) =>
+        prev.map((u) => (u.id === userId ? { ...u, isAdmin: !current } : u))
+      );
+    } catch (e) {
+      console.error("toggleAdminRole error", e);
+      throw e;
+    }
+  }
+
+  async function suspendUser(userId: string, suspend: boolean) {
+    try {
+      await updateDoc(doc(db, "users", userId), { suspended: suspend });
+      setAllUsers((prev) =>
+        prev.map((u) => (u.id === userId ? { ...u, suspended: suspend } : u))
+      );
+    } catch (e) {
+      console.error("suspendUser error", e);
+      throw e;
+    }
+  }
+
+  async function deleteUserFromFirestore(userId: string) {
+    try {
+      await deleteDoc(doc(db, "users", userId));
+      setAllUsers((prev) => prev.filter((u) => u.id !== userId));
+    } catch (e) {
+      console.error("deleteUserFromFirestore error", e);
+      throw e;
+    }
+  }
+
   async function updateProfilePhoto(photoURL: string) {
     if (!user) return;
     try {
@@ -267,6 +310,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setLocationGranted,
         updateUserStats,
         updateProfilePhoto,
+        toggleAdminRole,
+        suspendUser,
+        deleteUserFromFirestore,
       }}
     >
       {children}

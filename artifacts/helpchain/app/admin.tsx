@@ -2,6 +2,8 @@ import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
   Animated,
   FlatList,
   Image,
@@ -10,6 +12,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableWithoutFeedback,
   View,
   useWindowDimensions,
@@ -214,7 +217,7 @@ export default function AdminScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const { user, allUsers, logout } = useAuth();
+  const { user, allUsers, loading, logout, toggleAdminRole, suspendUser, deleteUserFromFirestore } = useAuth();
   const { requests } = useHelp();
   const { donations, totalItems } = useDonations();
   const { messages } = useChat();
@@ -222,8 +225,19 @@ export default function AdminScreen() {
   const [section, setSection] = useState<Section>("dashboard");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [now, setNow] = useState(new Date());
+  const [userSearch, setUserSearch] = useState("");
   const drawerX = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
   const overlayOpacity = useRef(new Animated.Value(0)).current;
+
+  // ── Admin route guard ────────────────────────────────────────────────
+  useEffect(() => {
+    if (loading) return;
+    if (!user) {
+      router.replace("/(auth)/portal" as any);
+    } else if (!user.isAdmin) {
+      router.replace("/(tabs)" as any);
+    }
+  }, [user, loading]);
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 60000);
@@ -252,6 +266,34 @@ export default function AdminScreen() {
     },
     [closeDrawer]
   );
+
+  // ── Guard render ─────────────────────────────────────────────────────
+  if (loading || !user) {
+    return (
+      <View style={{ flex: 1, backgroundColor: BG, alignItems: "center", justifyContent: "center" }}>
+        <ActivityIndicator size="large" color={BLUE_LIGHT} />
+      </View>
+    );
+  }
+  if (!user.isAdmin) {
+    return (
+      <View style={{ flex: 1, backgroundColor: BG, alignItems: "center", justifyContent: "center", gap: 12, padding: 32 }}>
+        <Feather name="shield-off" size={48} color="#EF4444" />
+        <Text style={{ fontSize: 20, fontFamily: "Inter_700Bold", color: "#1E293B", textAlign: "center" }}>
+          Access Denied
+        </Text>
+        <Text style={{ fontSize: 14, fontFamily: "Inter_400Regular", color: "#64748B", textAlign: "center" }}>
+          You need admin privileges to access this dashboard.
+        </Text>
+        <Pressable
+          onPress={() => router.replace("/(tabs)" as any)}
+          style={{ backgroundColor: BLUE_LIGHT, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12, marginTop: 8 }}
+        >
+          <Text style={{ color: "#fff", fontFamily: "Inter_600SemiBold", fontSize: 15 }}>Go Back</Text>
+        </Pressable>
+      </View>
+    );
+  }
 
   const topPad = Platform.OS === "web" ? 56 : insets.top;
 
@@ -463,37 +505,227 @@ export default function AdminScreen() {
           </View>
         )}
 
-        {section === "users" && (
-          <View style={{ padding: 14, gap: 10 }}>
-            <Text style={styles.sectionHeader}>{allUsers.length} REGISTERED USERS</Text>
-            {allUsers.map((u) => (
-              <View key={u.id} style={[styles.card, { flexDirection: "row", gap: 12, alignItems: "center" }]}>
-                <View style={[styles.requestAvatar, { width: 48, height: 48, borderRadius: 24 }]}>
-                  <Text style={[styles.requestAvatarText, { fontSize: 18 }]}>{u.name.charAt(0)}</Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                    <Text style={styles.requestName}>{u.name}</Text>
-                    {u.isAdmin && (
-                      <View style={{ backgroundColor: "#DBEAFE", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 10 }}>
-                        <Text style={{ fontSize: 9, color: BLUE_LIGHT, fontFamily: "Inter_600SemiBold" }}>Admin</Text>
+        {section === "users" && (() => {
+          const filtered = allUsers.filter(
+            (u) =>
+              u.name.toLowerCase().includes(userSearch.toLowerCase()) ||
+              u.email.toLowerCase().includes(userSearch.toLowerCase())
+          );
+
+          async function handleToggleAdmin(u: typeof allUsers[0]) {
+            if (u.id === user?.id) {
+              Alert.alert("Not Allowed", "You cannot change your own admin role.");
+              return;
+            }
+            Alert.alert(
+              u.isAdmin ? "Remove Admin" : "Make Admin",
+              `${u.isAdmin ? "Remove admin privileges from" : "Grant admin privileges to"} ${u.name}?`,
+              [
+                { text: "Cancel", style: "cancel" },
+                {
+                  text: u.isAdmin ? "Remove" : "Promote",
+                  style: u.isAdmin ? "destructive" : "default",
+                  onPress: async () => {
+                    try { await toggleAdminRole(u.id); }
+                    catch { Alert.alert("Error", "Failed to update role."); }
+                  },
+                },
+              ]
+            );
+          }
+
+          async function handleSuspend(u: typeof allUsers[0]) {
+            if (u.id === user?.id) {
+              Alert.alert("Not Allowed", "You cannot suspend your own account.");
+              return;
+            }
+            const action = u.suspended ? "Unsuspend" : "Suspend";
+            Alert.alert(
+              `${action} User`,
+              `${action} ${u.name}'s access to HelpChain?`,
+              [
+                { text: "Cancel", style: "cancel" },
+                {
+                  text: action,
+                  style: u.suspended ? "default" : "destructive",
+                  onPress: async () => {
+                    try { await suspendUser(u.id, !u.suspended); }
+                    catch { Alert.alert("Error", "Failed to update user."); }
+                  },
+                },
+              ]
+            );
+          }
+
+          async function handleDelete(u: typeof allUsers[0]) {
+            if (u.id === user?.id) {
+              Alert.alert("Not Allowed", "You cannot delete your own account here.");
+              return;
+            }
+            Alert.alert(
+              "Delete User",
+              `Permanently remove ${u.name} from HelpChain? This cannot be undone.`,
+              [
+                { text: "Cancel", style: "cancel" },
+                {
+                  text: "Delete",
+                  style: "destructive",
+                  onPress: async () => {
+                    try { await deleteUserFromFirestore(u.id); }
+                    catch { Alert.alert("Error", "Failed to delete user."); }
+                  },
+                },
+              ]
+            );
+          }
+
+          return (
+            <View style={{ padding: 14, gap: 10 }}>
+              {/* Search bar */}
+              <View style={[styles.card, { flexDirection: "row", alignItems: "center", gap: 10, padding: 12 }]}>
+                <Feather name="search" size={16} color="#94A3B8" />
+                <TextInput
+                  value={userSearch}
+                  onChangeText={setUserSearch}
+                  placeholder="Search users by name or email…"
+                  placeholderTextColor="#94A3B8"
+                  style={{ flex: 1, fontSize: 13, fontFamily: "Inter_400Regular", color: "#1E293B" }}
+                />
+                {userSearch.length > 0 && (
+                  <Pressable onPress={() => setUserSearch("")}>
+                    <Feather name="x" size={14} color="#94A3B8" />
+                  </Pressable>
+                )}
+              </View>
+
+              <Text style={styles.sectionHeader}>
+                {filtered.length} / {allUsers.length} USERS
+              </Text>
+
+              {filtered.map((u) => {
+                const isSelf = u.id === user?.id;
+                const donatedItems = donations.filter((d) => d.donorId === u.id).reduce((s, d) => s + d.quantity, 0);
+                return (
+                  <View
+                    key={u.id}
+                    style={[
+                      styles.card,
+                      u.suspended && { borderWidth: 1.5, borderColor: "#FEF2F2" },
+                    ]}
+                  >
+                    {/* Top row: avatar + info + badges */}
+                    <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
+                      {/* Avatar */}
+                      <View style={[styles.requestAvatar, { width: 48, height: 48, borderRadius: 24, overflow: "hidden" }]}>
+                        {u.photoURL ? (
+                          <Image source={{ uri: u.photoURL }} style={{ width: 48, height: 48 }} resizeMode="cover" />
+                        ) : (
+                          <Text style={[styles.requestAvatarText, { fontSize: 18 }]}>{u.name.charAt(0).toUpperCase()}</Text>
+                        )}
+                      </View>
+
+                      {/* Name + email + badges */}
+                      <View style={{ flex: 1 }}>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 5, flexWrap: "wrap" }}>
+                          <Text style={styles.requestName}>{u.name}</Text>
+                          {isSelf && (
+                            <View style={{ backgroundColor: "#F0FDF4", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 }}>
+                              <Text style={{ fontSize: 9, color: "#16A34A", fontFamily: "Inter_600SemiBold" }}>You</Text>
+                            </View>
+                          )}
+                          {u.isAdmin && (
+                            <View style={{ backgroundColor: "#DBEAFE", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 }}>
+                              <Text style={{ fontSize: 9, color: BLUE_LIGHT, fontFamily: "Inter_600SemiBold" }}>Admin</Text>
+                            </View>
+                          )}
+                          {u.suspended && (
+                            <View style={{ backgroundColor: "#FEF2F2", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 }}>
+                              <Text style={{ fontSize: 9, color: "#EF4444", fontFamily: "Inter_600SemiBold" }}>Suspended</Text>
+                            </View>
+                          )}
+                        </View>
+                        <Text style={styles.requestLoc}>{u.email}</Text>
+                        {u.phone ? <Text style={styles.requestLoc}>{u.phone}</Text> : null}
+                      </View>
+                    </View>
+
+                    {/* Stats row */}
+                    <View style={{ flexDirection: "row", gap: 14, marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: "#F1F5F9" }}>
+                      <View style={{ alignItems: "center", gap: 1 }}>
+                        <Text style={{ fontSize: 14, fontFamily: "Inter_700Bold", color: BLUE_LIGHT }}>{u.requestsCreated}</Text>
+                        <Text style={{ fontSize: 9, fontFamily: "Inter_400Regular", color: "#94A3B8" }}>Requests</Text>
+                      </View>
+                      <View style={{ alignItems: "center", gap: 1 }}>
+                        <Text style={{ fontSize: 14, fontFamily: "Inter_700Bold", color: "#14B8A6" }}>{u.helpOffered}</Text>
+                        <Text style={{ fontSize: 9, fontFamily: "Inter_400Regular", color: "#94A3B8" }}>Helped</Text>
+                      </View>
+                      <View style={{ alignItems: "center", gap: 1 }}>
+                        <Text style={{ fontSize: 14, fontFamily: "Inter_700Bold", color: "#F59E0B" }}>{donatedItems}</Text>
+                        <Text style={{ fontSize: 9, fontFamily: "Inter_400Regular", color: "#94A3B8" }}>Donated</Text>
+                      </View>
+                      <View style={{ flex: 1 }} />
+                      <Text style={{ fontSize: 9, fontFamily: "Inter_400Regular", color: "#CBD5E1", alignSelf: "flex-end" }}>
+                        Since {new Date(u.createdAt).toLocaleDateString("en-US", { month: "short", year: "numeric" })}
+                      </Text>
+                    </View>
+
+                    {/* Action buttons — hidden for self */}
+                    {!isSelf && (
+                      <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
+                        {/* Promote / Demote */}
+                        <Pressable
+                          onPress={() => handleToggleAdmin(u)}
+                          style={({ pressed }) => [
+                            styles.adminActionBtn,
+                            { backgroundColor: u.isAdmin ? "#FEF3C7" : "#DBEAFE", opacity: pressed ? 0.75 : 1 },
+                          ]}
+                        >
+                          <Feather name="shield" size={12} color={u.isAdmin ? "#D97706" : BLUE_LIGHT} />
+                          <Text style={{ fontSize: 11, fontFamily: "Inter_600SemiBold", color: u.isAdmin ? "#D97706" : BLUE_LIGHT }}>
+                            {u.isAdmin ? "Remove Admin" : "Make Admin"}
+                          </Text>
+                        </Pressable>
+
+                        {/* Suspend / Unsuspend */}
+                        <Pressable
+                          onPress={() => handleSuspend(u)}
+                          style={({ pressed }) => [
+                            styles.adminActionBtn,
+                            { backgroundColor: u.suspended ? "#F0FDF4" : "#FEF2F2", opacity: pressed ? 0.75 : 1 },
+                          ]}
+                        >
+                          <Feather name={u.suspended ? "user-check" : "user-x"} size={12} color={u.suspended ? "#16A34A" : "#EF4444"} />
+                          <Text style={{ fontSize: 11, fontFamily: "Inter_600SemiBold", color: u.suspended ? "#16A34A" : "#EF4444" }}>
+                            {u.suspended ? "Unsuspend" : "Suspend"}
+                          </Text>
+                        </Pressable>
+
+                        {/* Delete */}
+                        <Pressable
+                          onPress={() => handleDelete(u)}
+                          style={({ pressed }) => [
+                            styles.adminActionBtn,
+                            { backgroundColor: "#F8FAFC", opacity: pressed ? 0.75 : 1 },
+                          ]}
+                        >
+                          <Feather name="trash-2" size={12} color="#94A3B8" />
+                          <Text style={{ fontSize: 11, fontFamily: "Inter_600SemiBold", color: "#94A3B8" }}>Delete</Text>
+                        </Pressable>
                       </View>
                     )}
                   </View>
-                  <Text style={styles.requestLoc}>{u.email}</Text>
-                  <Text style={styles.requestLoc}>{u.phone}</Text>
-                  <View style={{ flexDirection: "row", gap: 10, marginTop: 4 }}>
-                    <Text style={{ fontSize: 10, color: BLUE_LIGHT, fontFamily: "Inter_500Medium" }}>{u.requestsCreated} requests</Text>
-                    <Text style={{ fontSize: 10, color: "#14B8A6", fontFamily: "Inter_500Medium" }}>{u.helpOffered} helped</Text>
-                    <Text style={{ fontSize: 10, color: "#F59E0B", fontFamily: "Inter_500Medium" }}>
-                      {donations.filter((d) => d.donorId === u.id).reduce((s, d) => s + d.quantity, 0)} items donated
-                    </Text>
-                  </View>
+                );
+              })}
+
+              {filtered.length === 0 && (
+                <View style={{ alignItems: "center", paddingVertical: 40, gap: 8 }}>
+                  <Feather name="users" size={32} color="#CBD5E1" />
+                  <Text style={{ color: "#94A3B8", fontFamily: "Inter_400Regular", fontSize: 14 }}>No users match your search</Text>
                 </View>
-              </View>
-            ))}
-          </View>
-        )}
+              )}
+            </View>
+          );
+        })()}
 
         {section === "requests" && (
           <View style={{ padding: 14, gap: 10 }}>
@@ -895,4 +1127,13 @@ const styles = StyleSheet.create({
   drawerUser: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 14, paddingVertical: 12 },
   drawerLogout: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 14, paddingVertical: 10 },
   drawerLogoutText: { fontSize: 13, fontFamily: "Inter_500Medium", color: "rgba(255,255,255,0.7)" },
+
+  adminActionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 8,
+  },
 });

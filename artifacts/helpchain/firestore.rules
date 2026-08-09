@@ -1,8 +1,89 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if request.auth != null;
+
+    // ── Helpers ────────────────────────────────────────────────────────
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Reads the caller's stored isAdmin flag — if their profile doesn't exist
+    // yet (e.g. mid-signup) the function returns false safely.
+    function callerIsAdmin() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+    }
+
+    // ── Users ──────────────────────────────────────────────────────────
+    match /users/{userId} {
+      // Any signed-in user may read the user directory
+      allow read: if isSignedIn();
+
+      // A user may create their own profile document on sign-up,
+      // but may NOT grant themselves admin rights at creation time.
+      allow create: if isOwner(userId)
+        && (!('isAdmin' in request.resource.data)
+            || request.resource.data.isAdmin == false);
+
+      // A user may update their own profile (photo, stats, etc.)
+      // but cannot change their own isAdmin flag.
+      allow update: if isOwner(userId)
+        && (
+          !('isAdmin' in request.resource.data)
+          || request.resource.data.isAdmin == resource.data.isAdmin
+        );
+
+      // Admins may update or delete any user profile (promote/demote/suspend).
+      allow update, delete: if callerIsAdmin();
+    }
+
+    // ── Help Requests ──────────────────────────────────────────────────
+    match /requests/{requestId} {
+      allow read:   if isSignedIn();
+      allow create: if isSignedIn();
+      // Any signed-in user may update (offer help, complete, etc.)
+      allow update: if isSignedIn();
+      // Only admins may hard-delete requests
+      allow delete: if callerIsAdmin();
+    }
+
+    // ── Community Chat ─────────────────────────────────────────────────
+    match /chat/{messageId} {
+      allow read:   if isSignedIn();
+      allow create: if isSignedIn();
+      // Only admins may delete messages (moderation)
+      allow delete: if callerIsAdmin();
+    }
+
+    // ── Notifications ──────────────────────────────────────────────────
+    match /notifications/{notifId} {
+      // Users may only read their own notifications or broadcast ones
+      allow read: if isSignedIn() && (
+        resource.data.targetUserId == request.auth.uid
+        || resource.data.targetUserId == 'all'
+        || callerIsAdmin()
+      );
+      allow write: if isSignedIn();
+    }
+
+    // ── Donations ──────────────────────────────────────────────────────
+    match /donations/{donId} {
+      allow read:   if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if callerIsAdmin();
+    }
+
+    // ── Presence (live location + online status) ───────────────────────
+    match /presence/{userId} {
+      allow read:  if isSignedIn();
+      // Users write their own presence; admins can clear stale records
+      allow write: if isOwner(userId) || callerIsAdmin();
     }
   }
 }

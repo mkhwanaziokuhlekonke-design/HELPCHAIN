@@ -1,11 +1,12 @@
 import { BlurView } from "expo-blur";
 import { isLiquidGlassAvailable } from "expo-glass-effect";
-import { Tabs } from "expo-router";
+import { Tabs, useRouter } from "expo-router";
 import { Icon, Label, NativeTabs } from "expo-router/unstable-native-tabs";
 import { SymbolView } from "expo-symbols";
 import { Feather } from "@expo/vector-icons";
-import React from "react";
-import { Platform, StyleSheet, View, useColorScheme } from "react-native";
+import React, { useEffect } from "react";
+import { ActivityIndicator, Platform, StyleSheet, View, useColorScheme } from "react-native";
+import { useAuth } from "@/context/AuthContext";
 import { useNotifications } from "@/context/NotificationContext";
 import { useColors } from "@/hooks/useColors";
 
@@ -136,6 +137,25 @@ function ClassicTabLayout() {
 }
 
 export default function TabLayout() {
+  const { user, loading } = useAuth();
+  const router = useRouter();
+
+  // Auth guard — unauthenticated users should never reach the tabs
+  useEffect(() => {
+    if (!loading && !user) {
+      router.replace("/(auth)/portal" as any);
+    }
+  }, [user, loading]);
+
+  // Block render until we know auth state
+  if (loading || !user) {
+    return (
+      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#fff" }}>
+        <ActivityIndicator size="large" color="#2563EB" />
+      </View>
+    );
+  }
+
   if (isLiquidGlassAvailable()) {
     return <NativeTabLayout />;
   }
