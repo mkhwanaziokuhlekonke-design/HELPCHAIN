@@ -219,19 +219,31 @@ function buildNavHtml(
 
   // ── Live helper position updates ──────────────────────────────────────
   function applyUpdate(msg) {
-    if (!msg || msg.type !== 'UPDATE_HELPER') return;
-    var lat = msg.lat, lng = msg.lng;
-    helperMarker.setLatLng([lat, lng]);
-    updateInfo(lat, lng);
-    // Re-draw route every ~50m
-    var prev = helperLatLng;
-    var dLat = lat - prev[0], dLng = lng - prev[1];
-    var moved = Math.sqrt(dLat*dLat + dLng*dLng) * 111000; // approx metres
-    helperLatLng = [lat, lng];
-    if (moved > 50) drawRoute(lat, lng);
-    // Keep helper in view
-    if (!map.getBounds().contains([lat, lng])) {
-      map.panTo([lat, lng], { animate:true, duration:0.8 });
+    if (!msg) return;
+
+    // ── Helper moved ─────────────────────────────────────────────────
+    if (msg.type === 'UPDATE_HELPER') {
+      var lat = msg.lat, lng = msg.lng;
+      helperMarker.setLatLng([lat, lng]);
+      updateInfo(lat, lng);
+      var prev = helperLatLng;
+      var dLat = lat - prev[0], dLng = lng - prev[1];
+      var moved = Math.sqrt(dLat*dLat + dLng*dLng) * 111000;
+      helperLatLng = [lat, lng];
+      if (moved > 50) drawRoute(lat, lng);
+      if (!map.getBounds().contains([lat, lng])) {
+        map.panTo([lat, lng], { animate:true, duration:0.8 });
+      }
+    }
+
+    // ── Requester moved (live GPS from presence) ──────────────────────
+    if (msg.type === 'UPDATE_DESTINATION') {
+      reqLatLng = [msg.lat, msg.lng];
+      reqMarker.setLatLng(reqLatLng);
+      updateInfo(helperLatLng[0], helperLatLng[1]);
+      drawRoute(helperLatLng[0], helperLatLng[1]);
+      var bounds = L.latLngBounds([helperMarker.getLatLng(), reqMarker.getLatLng()]);
+      map.fitBounds(bounds, { padding:[48,48] });
     }
   }
 
@@ -251,6 +263,8 @@ export interface NavigationMapProps {
   requesterCoords: { latitude: number; longitude: number };
   requesterName: string;
   requesterAddress?: string;
+  /** Pass the requester's uid so the map can track their live GPS from presence. */
+  requesterUid?: string;
   fullScreen?: boolean;
   onClose?: () => void;
 }
@@ -259,48 +273,46 @@ export function NavigationMap({
   requesterCoords,
   requesterName,
   requesterAddress,
+  requesterUid,
   fullScreen = false,
   onClose,
 }: NavigationMapProps) {
-  const { myCoords } = useLocation();
+  const { myCoords, userLocations } = useLocation();
   const webViewRef = useRef<any>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const readyRef = useRef(false);
-  const prevCoordsRef = useRef<{ latitude: number; longitude: number } | null>(null);
+  const prevHelperRef = useRef<{ latitude: number; longitude: number } | null>(null);
+  const prevDestRef = useRef<{ latitude: number; longitude: number } | null>(null);
 
-  // Fallback coords if GPS not yet ready (just show requester area)
+  // Live requester position from presence — updates in real time if they have GPS on
+  const liveRequester = requesterUid
+    ? userLocations.find((u) => u.uid === requesterUid)
+    : null;
+  const destCoords = liveRequester
+    ? { latitude: liveRequester.latitude, longitude: liveRequester.longitude }
+    : requesterCoords;
+
+  // Fallback helper start if GPS not yet ready
   const helperStart = myCoords ?? {
-    latitude: requesterCoords.latitude + 0.002,
-    longitude: requesterCoords.longitude + 0.002,
+    latitude: destCoords.latitude + 0.002,
+    longitude: destCoords.longitude + 0.002,
   };
 
   const [distance, setDistance] = useState<string | null>(null);
   const [eta, setEta] = useState<string | null>(null);
 
-  // Keep distance/ETA updated as helper moves
+  // Keep distance/ETA updated as helper or requester moves
   useEffect(() => {
     if (!myCoords) return;
     const km = haversineKm(
       myCoords.latitude, myCoords.longitude,
-      requesterCoords.latitude, requesterCoords.longitude
+      destCoords.latitude, destCoords.longitude
     );
     setDistance(fmtDistance(km));
     setEta(fmtEta(km));
-  }, [myCoords, requesterCoords]);
+  }, [myCoords, destCoords]);
 
-  // Push helper position updates to the map
-  useEffect(() => {
-    if (!myCoords) return;
-    const prev = prevCoordsRef.current;
-    if (prev && prev.latitude === myCoords.latitude && prev.longitude === myCoords.longitude) return;
-    prevCoordsRef.current = myCoords;
-
-    const payload = JSON.stringify({
-      type: "UPDATE_HELPER",
-      lat: myCoords.latitude,
-      lng: myCoords.longitude,
-    });
-
+  function pushToMap(payload: string) {
     if (Platform.OS === "web") {
       iframeRef.current?.contentWindow?.postMessage(payload, "*");
     } else if (webViewRef.current && readyRef.current) {
@@ -312,13 +324,31 @@ export function NavigationMap({
         })(); true;
       `);
     }
+  }
+
+  // Push helper position updates to the map
+  useEffect(() => {
+    if (!myCoords) return;
+    const prev = prevHelperRef.current;
+    if (prev && prev.latitude === myCoords.latitude && prev.longitude === myCoords.longitude) return;
+    prevHelperRef.current = myCoords;
+    pushToMap(JSON.stringify({ type: "UPDATE_HELPER", lat: myCoords.latitude, lng: myCoords.longitude }));
   }, [myCoords]);
+
+  // Push requester live position updates to the map
+  useEffect(() => {
+    if (!liveRequester) return;
+    const prev = prevDestRef.current;
+    if (prev && prev.latitude === destCoords.latitude && prev.longitude === destCoords.longitude) return;
+    prevDestRef.current = destCoords;
+    pushToMap(JSON.stringify({ type: "UPDATE_DESTINATION", lat: destCoords.latitude, lng: destCoords.longitude }));
+  }, [destCoords]);
 
   const html = buildNavHtml(
     helperStart.latitude,
     helperStart.longitude,
-    requesterCoords.latitude,
-    requesterCoords.longitude,
+    destCoords.latitude,
+    destCoords.longitude,
     requesterName
   );
 

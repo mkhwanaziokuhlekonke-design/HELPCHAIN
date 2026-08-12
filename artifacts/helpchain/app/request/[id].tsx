@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -47,13 +47,20 @@ export default function RequestDetailScreen() {
   const { getRequestById, offerHelp, completeRequest, cancelRequest } = useHelp();
   const { user, updateUserStats } = useAuth();
   const { addNotification } = useNotifications();
-  const { myCoords } = useLocation();
+  const { myCoords, userLocations } = useLocation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(false);
   const [showNavMap, setShowNavMap] = useState(false);
 
   const request = getRequestById(id);
+
+  // Auto-reopen navigation when a confirmed helper returns to this screen
+  useEffect(() => {
+    if (request && user?.id === request.helperId && request.status === "accepted") {
+      setShowNavMap(true);
+    }
+  }, [request?.status, request?.helperId, user?.id]);
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const bottomPad = Platform.OS === "web" ? 34 : insets.bottom + 24;
 
@@ -76,6 +83,14 @@ export default function RequestDetailScreen() {
   const canComplete = (isRequester || isHelper || user?.isAdmin) && request.status === "accepted";
   const canCancel = (isRequester || user?.isAdmin) && (request.status === "open" || request.status === "accepted");
 
+  // Resolve destination: pinned location first, then requester's live GPS from presence
+  const liveRequesterLoc = userLocations.find((u) => u.uid === request.requesterId);
+  const destination: { latitude: number; longitude: number; address?: string } | null =
+    request.location
+      ?? (liveRequesterLoc
+        ? { latitude: liveRequesterLoc.latitude, longitude: liveRequesterLoc.longitude }
+        : null);
+
   async function handleOfferHelp() {
     if (!user) return;
     Alert.alert("Offer Help", `Confirm that you'll help with: "${request!.title}"`, [
@@ -94,8 +109,8 @@ export default function RequestDetailScreen() {
             requestId: request!.id,
           });
           setLoading(false);
-          // Auto-open navigation if the request has a pinned location
-          if (request!.location) setShowNavMap(true);
+          // Always open navigation — uses pinned location or live GPS
+          setShowNavMap(true);
         },
       },
     ]);
@@ -217,8 +232,8 @@ export default function RequestDetailScreen() {
           </View>
         )}
 
-        {/* ── Navigation card — visible when this user is the helper ── */}
-        {isHelper && request.status === "accepted" && request.location && (
+        {/* ── Navigation card — visible when this user is the confirmed helper ── */}
+        {isHelper && request.status === "accepted" && (
           <View style={[styles.navCard, { borderColor: "#2563EB30" }]}>
             {/* Header row */}
             <View style={styles.navCardHeader}>
@@ -233,20 +248,33 @@ export default function RequestDetailScreen() {
               </Pressable>
             </View>
 
-            {/* Embedded mini map */}
-            <View style={styles.miniMapWrap}>
-              <NavigationMap
-                requesterCoords={request.location}
-                requesterName={request.requesterName}
-                requesterAddress={request.location.address}
-              />
-            </View>
+            {/* Embedded mini map — shows when destination is known */}
+            {destination ? (
+              <View style={styles.miniMapWrap}>
+                <NavigationMap
+                  requesterCoords={destination}
+                  requesterName={request.requesterName}
+                  requesterAddress={destination.address}
+                  requesterUid={request.requesterId}
+                />
+              </View>
+            ) : (
+              <View style={{ height: 120, alignItems: "center", justifyContent: "center", gap: 6 }}>
+                <Feather name="map-pin" size={24} color="#94A3B8" />
+                <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: "#94A3B8", textAlign: "center" }}>
+                  Waiting for {request.requesterName}'s location…
+                </Text>
+                <Text style={{ fontSize: 11, fontFamily: "Inter_400Regular", color: "#CBD5E1", textAlign: "center" }}>
+                  They'll appear on the map when their GPS is active
+                </Text>
+              </View>
+            )}
 
             {/* Distance / ETA row */}
-            {myCoords && (() => {
+            {myCoords && destination && (() => {
               const km = Math.sqrt(
-                ((myCoords.latitude - request.location!.latitude) * 111) ** 2 +
-                ((myCoords.longitude - request.location!.longitude) * 111 * Math.cos(myCoords.latitude * Math.PI / 180)) ** 2
+                ((myCoords.latitude - destination.latitude) * 111) ** 2 +
+                ((myCoords.longitude - destination.longitude) * 111 * Math.cos(myCoords.latitude * Math.PI / 180)) ** 2
               );
               const mins = Math.round((km / 30) * 60);
               return (
@@ -256,6 +284,9 @@ export default function RequestDetailScreen() {
                     {km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(1)} km`}
                     {" · "}
                     {mins < 1 ? "< 1 min" : mins < 60 ? `${mins} min` : `${Math.floor(mins / 60)}h ${mins % 60}m`} away
+                    {liveRequesterLoc && !request.location && (
+                      <Text style={{ color: "#10B981", fontSize: 11, fontFamily: "Inter_400Regular" }}> · Live GPS</Text>
+                    )}
                   </Text>
                   <Pressable onPress={() => setShowNavMap(true)} style={styles.fullNavBtn}>
                     <Text style={styles.fullNavBtnText}>Full Map</Text>
@@ -268,19 +299,40 @@ export default function RequestDetailScreen() {
 
         {/* ── Full-screen navigation modal ── */}
         <Modal
-          visible={showNavMap && !!request.location}
+          visible={showNavMap}
           animationType="slide"
           statusBarTranslucent
           onRequestClose={() => setShowNavMap(false)}
         >
-          {request.location && (
+          {destination ? (
             <NavigationMap
-              requesterCoords={request.location}
+              requesterCoords={destination}
               requesterName={request.requesterName}
-              requesterAddress={request.location.address}
+              requesterAddress={destination.address}
+              requesterUid={request.requesterId}
               fullScreen
               onClose={() => setShowNavMap(false)}
             />
+          ) : (
+            /* No destination yet — waiting for live GPS */
+            <View style={{ flex: 1, backgroundColor: "#0F172A", alignItems: "center", justifyContent: "center", gap: 16, padding: 32 }}>
+              <View style={{ width: 72, height: 72, borderRadius: 36, backgroundColor: "#1E3A5F", alignItems: "center", justifyContent: "center" }}>
+                <Feather name="map-pin" size={32} color="#60A5FA" />
+              </View>
+              <Text style={{ fontSize: 20, fontFamily: "Inter_700Bold", color: "#F1F5F9", textAlign: "center" }}>
+                Locating {request.requesterName}…
+              </Text>
+              <Text style={{ fontSize: 14, fontFamily: "Inter_400Regular", color: "#94A3B8", textAlign: "center", lineHeight: 22 }}>
+                Navigation will start as soon as their location is available. Make sure they have location sharing enabled.
+              </Text>
+              <ActivityIndicator color="#60A5FA" style={{ marginTop: 8 }} />
+              <Pressable
+                onPress={() => setShowNavMap(false)}
+                style={{ marginTop: 16, backgroundColor: "#1E293B", paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 }}
+              >
+                <Text style={{ color: "#94A3B8", fontFamily: "Inter_500Medium", fontSize: 15 }}>Close</Text>
+              </Pressable>
+            </View>
           )}
         </Modal>
 
