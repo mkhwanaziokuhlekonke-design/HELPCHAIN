@@ -611,7 +611,7 @@ export default function HomeScreen() {
           >
             <LinearGradient colors={btn.colors} style={styles.floatBtnInner}>
               <View style={styles.floatIconRing}>
-                <Feather name={btn.icon as any} size={22} color="#fff" />
+                <Feather name={btn.icon as any} size={24} color="#fff" />
               </View>
               <Text style={styles.floatLabel}>{btn.shortTitle}</Text>
             </LinearGradient>
@@ -844,7 +844,7 @@ const styles = StyleSheet.create({
   headerGrad: { paddingHorizontal: 20, paddingBottom: 22 },
   headerRow: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", paddingTop: 14, paddingHorizontal: 20 },
   greetingCol: { gap: 2, flex: 1 },
-  greetingSmall: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#64748B" },
+  greetingSmall: { fontSize: 17, fontFamily: "Inter_700Bold", color: "#1E293B" },
   greetingName: { fontSize: 22, fontFamily: "Inter_700Bold", color: "#1E3A8A" },
   slogan: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#2563EB", marginTop: 2 },
   activeRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 4 },
@@ -899,18 +899,21 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   floatIconRing: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "rgba(255,255,255,0.18)",
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: "rgba(255,255,255,0.30)",
+    borderWidth: 1.5,
+    borderColor: "rgba(255,255,255,0.55)",
     alignItems: "center",
     justifyContent: "center",
   },
   floatLabel: {
     color: "#fff",
-    fontSize: 10,
-    fontFamily: "Inter_600SemiBold",
+    fontSize: 11,
+    fontFamily: "Inter_700Bold",
     textAlign: "center",
+    letterSpacing: 0.2,
   },
   // kept for donate modal
   buttonGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
