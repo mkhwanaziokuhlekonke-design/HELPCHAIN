@@ -43,6 +43,7 @@ interface AuthContextType {
   setLocationGranted: (val: boolean) => void;
   updateUserStats: (userId: string, field: "requestsCreated" | "helpOffered") => void;
   updateProfilePhoto: (photoURL: string) => Promise<void>;
+  updateProfileName: (name: string, phone: string) => Promise<void>;
   toggleAdminRole: (userId: string) => Promise<void>;
   suspendUser: (userId: string, suspend: boolean) => Promise<void>;
   deleteUserFromFirestore: (userId: string) => Promise<void>;
@@ -269,6 +270,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  async function updateProfileName(name: string, phone: string) {
+    if (!user) return;
+    const trimmedName = name.trim();
+    const trimmedPhone = phone.trim();
+    if (!trimmedName) throw new Error("Name cannot be empty");
+    try {
+      await updateDoc(doc(db, "users", user.id), { name: trimmedName, phone: trimmedPhone });
+      setUser((prev) => prev ? { ...prev, name: trimmedName, phone: trimmedPhone } : prev);
+    } catch (e) {
+      console.error("updateProfileName error", e);
+      throw e;
+    }
+  }
+
   async function logout() {
     await signOut(auth);
     setUser(null);
@@ -310,6 +325,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setLocationGranted,
         updateUserStats,
         updateProfilePhoto,
+        updateProfileName,
         toggleAdminRole,
         suspendUser,
         deleteUserFromFirestore,

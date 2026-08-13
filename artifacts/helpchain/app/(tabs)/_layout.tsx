@@ -3,12 +3,27 @@ import { isLiquidGlassAvailable } from "expo-glass-effect";
 import { Tabs, useRouter } from "expo-router";
 import { Icon, Label, NativeTabs } from "expo-router/unstable-native-tabs";
 import { SymbolView } from "expo-symbols";
-import { Feather, Ionicons } from "@expo/vector-icons";
 import React, { useEffect } from "react";
-import { ActivityIndicator, Platform, StyleSheet, View, useColorScheme } from "react-native";
+import {
+  ActivityIndicator,
+  Platform,
+  StyleSheet,
+  Text,
+  View,
+  useColorScheme,
+} from "react-native";
 import { useAuth } from "@/context/AuthContext";
 import { useNotifications } from "@/context/NotificationContext";
 import { useColors } from "@/hooks/useColors";
+
+/* Emoji tab icons — OS-rendered, zero font dependency, works on all Android versions */
+function EmojiIcon({ emoji, focused, color }: { emoji: string; focused: boolean; color: string }) {
+  return (
+    <Text style={{ fontSize: 22, opacity: focused ? 1 : 0.55, lineHeight: 28 }}>
+      {emoji}
+    </Text>
+  );
+}
 
 function NativeTabLayout() {
   return (
@@ -79,7 +94,7 @@ function ClassicTabLayout() {
             isIOS ? (
               <SymbolView name="house" tintColor={color} size={24} />
             ) : (
-              <Ionicons name={focused ? "home" : "home-outline"} size={24} color={color} />
+              <EmojiIcon emoji="🏠" focused={focused} color={color} />
             ),
         }}
       />
@@ -91,7 +106,7 @@ function ClassicTabLayout() {
             isIOS ? (
               <SymbolView name="person.2" tintColor={color} size={24} />
             ) : (
-              <Ionicons name={focused ? "hand-left" : "hand-left-outline"} size={24} color={color} />
+              <EmojiIcon emoji="🙋" focused={focused} color={color} />
             ),
         }}
       />
@@ -103,7 +118,7 @@ function ClassicTabLayout() {
             isIOS ? (
               <SymbolView name="message.circle" tintColor={color} size={24} />
             ) : (
-              <Ionicons name={focused ? "chatbubbles" : "chatbubbles-outline"} size={24} color={color} />
+              <EmojiIcon emoji="💬" focused={focused} color={color} />
             ),
         }}
       />
@@ -116,7 +131,7 @@ function ClassicTabLayout() {
             isIOS ? (
               <SymbolView name="bell" tintColor={color} size={24} />
             ) : (
-              <Ionicons name={focused ? "notifications" : "notifications-outline"} size={24} color={color} />
+              <EmojiIcon emoji="🔔" focused={focused} color={color} />
             ),
         }}
       />
@@ -128,7 +143,7 @@ function ClassicTabLayout() {
             isIOS ? (
               <SymbolView name="person.circle" tintColor={color} size={24} />
             ) : (
-              <Ionicons name={focused ? "person-circle" : "person-circle-outline"} size={24} color={color} />
+              <EmojiIcon emoji="👤" focused={focused} color={color} />
             ),
         }}
       />

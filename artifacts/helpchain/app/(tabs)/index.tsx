@@ -492,9 +492,9 @@ export default function HomeScreen() {
 
   const greeting = () => {
     const h = new Date().getHours();
-    if (h < 12) return "Good morning";
-    if (h < 17) return "Good afternoon";
-    return "Good evening";
+    if (h < 12) return "GOOD MORNING";
+    if (h < 17) return "GOOD AFTERNOON";
+    return "GOOD EVENING";
   };
 
   const isAdmin = user?.isAdmin ?? false;
@@ -502,7 +502,7 @@ export default function HomeScreen() {
   const ACTION_BUTTONS = [
     {
       key: "request",
-      icon: "hand-left" as const,
+      emoji: "🙋",
       title: "Request Help",
       shortTitle: "Request",
       sub: "Post a help request",
@@ -511,7 +511,7 @@ export default function HomeScreen() {
     },
     {
       key: "emergency",
-      icon: "warning" as const,
+      emoji: "🚨",
       title: "Emergency",
       shortTitle: "Emergency",
       sub: "Get urgent help now",
@@ -520,7 +520,7 @@ export default function HomeScreen() {
     },
     {
       key: "chat",
-      icon: "chatbubbles" as const,
+      emoji: "💬",
       title: "Community Chat",
       shortTitle: "Chat",
       sub: "Talk with your community",
@@ -529,7 +529,7 @@ export default function HomeScreen() {
     },
     {
       key: "donate",
-      icon: "gift" as const,
+      emoji: "🎁",
       title: "Donate",
       shortTitle: "Donate",
       sub: "Support HelpChain",
@@ -611,7 +611,7 @@ export default function HomeScreen() {
           >
             <LinearGradient colors={btn.colors} style={styles.floatBtnInner}>
               <View style={styles.floatIconRing}>
-                <Ionicons name={btn.icon} size={26} color="#fff" />
+                <Text style={styles.floatEmoji}>{btn.emoji}</Text>
               </View>
               <Text style={styles.floatLabel}>{btn.shortTitle}</Text>
             </LinearGradient>
@@ -914,6 +914,10 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_700Bold",
     textAlign: "center",
     letterSpacing: 0.2,
+  },
+  floatEmoji: {
+    fontSize: 22,
+    lineHeight: 28,
   },
   // kept for donate modal
   buttonGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
