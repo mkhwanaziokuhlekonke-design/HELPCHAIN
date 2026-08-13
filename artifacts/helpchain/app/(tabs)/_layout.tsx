@@ -3,7 +3,7 @@ import { isLiquidGlassAvailable } from "expo-glass-effect";
 import { Tabs, useRouter } from "expo-router";
 import { Icon, Label, NativeTabs } from "expo-router/unstable-native-tabs";
 import { SymbolView } from "expo-symbols";
-import { Feather } from "@expo/vector-icons";
+import { Feather, Ionicons } from "@expo/vector-icons";
 import React, { useEffect } from "react";
 import { ActivityIndicator, Platform, StyleSheet, View, useColorScheme } from "react-native";
 import { useAuth } from "@/context/AuthContext";
@@ -75,11 +75,11 @@ function ClassicTabLayout() {
         name="index"
         options={{
           title: "Home",
-          tabBarIcon: ({ color }) =>
+          tabBarIcon: ({ color, focused }) =>
             isIOS ? (
               <SymbolView name="house" tintColor={color} size={24} />
             ) : (
-              <Feather name="home" size={22} color={color} />
+              <Ionicons name={focused ? "home" : "home-outline"} size={24} color={color} />
             ),
         }}
       />
@@ -87,11 +87,11 @@ function ClassicTabLayout() {
         name="requests"
         options={{
           title: "Requests",
-          tabBarIcon: ({ color }) =>
+          tabBarIcon: ({ color, focused }) =>
             isIOS ? (
               <SymbolView name="person.2" tintColor={color} size={24} />
             ) : (
-              <Feather name="users" size={22} color={color} />
+              <Ionicons name={focused ? "hand-left" : "hand-left-outline"} size={24} color={color} />
             ),
         }}
       />
@@ -99,11 +99,11 @@ function ClassicTabLayout() {
         name="chat"
         options={{
           title: "Chat",
-          tabBarIcon: ({ color }) =>
+          tabBarIcon: ({ color, focused }) =>
             isIOS ? (
               <SymbolView name="message.circle" tintColor={color} size={24} />
             ) : (
-              <Feather name="message-circle" size={22} color={color} />
+              <Ionicons name={focused ? "chatbubbles" : "chatbubbles-outline"} size={24} color={color} />
             ),
         }}
       />
@@ -112,11 +112,11 @@ function ClassicTabLayout() {
         options={{
           title: "Alerts",
           tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
-          tabBarIcon: ({ color }) =>
+          tabBarIcon: ({ color, focused }) =>
             isIOS ? (
               <SymbolView name="bell" tintColor={color} size={24} />
             ) : (
-              <Feather name="bell" size={22} color={color} />
+              <Ionicons name={focused ? "notifications" : "notifications-outline"} size={24} color={color} />
             ),
         }}
       />
@@ -124,11 +124,11 @@ function ClassicTabLayout() {
         name="profile"
         options={{
           title: "Profile",
-          tabBarIcon: ({ color }) =>
+          tabBarIcon: ({ color, focused }) =>
             isIOS ? (
               <SymbolView name="person.circle" tintColor={color} size={24} />
             ) : (
-              <Feather name="user" size={22} color={color} />
+              <Ionicons name={focused ? "person-circle" : "person-circle-outline"} size={24} color={color} />
             ),
         }}
       />

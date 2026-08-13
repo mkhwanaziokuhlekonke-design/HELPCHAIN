@@ -15,7 +15,7 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
-import { Feather } from "@expo/vector-icons";
+import { Feather, Ionicons } from "@expo/vector-icons";
 import Svg, { Circle, Path, Line as SvgLine, Text as SvgText, G } from "react-native-svg";
 import * as Haptics from "expo-haptics";
 import * as Location from "expo-location";
@@ -502,7 +502,7 @@ export default function HomeScreen() {
   const ACTION_BUTTONS = [
     {
       key: "request",
-      icon: "life-buoy",
+      icon: "hand-left" as const,
       title: "Request Help",
       shortTitle: "Request",
       sub: "Post a help request",
@@ -511,7 +511,7 @@ export default function HomeScreen() {
     },
     {
       key: "emergency",
-      icon: "alert-triangle",
+      icon: "warning" as const,
       title: "Emergency",
       shortTitle: "Emergency",
       sub: "Get urgent help now",
@@ -520,7 +520,7 @@ export default function HomeScreen() {
     },
     {
       key: "chat",
-      icon: "message-circle",
+      icon: "chatbubbles" as const,
       title: "Community Chat",
       shortTitle: "Chat",
       sub: "Talk with your community",
@@ -529,7 +529,7 @@ export default function HomeScreen() {
     },
     {
       key: "donate",
-      icon: "gift",
+      icon: "gift" as const,
       title: "Donate",
       shortTitle: "Donate",
       sub: "Support HelpChain",
@@ -611,7 +611,7 @@ export default function HomeScreen() {
           >
             <LinearGradient colors={btn.colors} style={styles.floatBtnInner}>
               <View style={styles.floatIconRing}>
-                <Feather name={btn.icon as any} size={24} color="#fff" />
+                <Ionicons name={btn.icon} size={26} color="#fff" />
               </View>
               <Text style={styles.floatLabel}>{btn.shortTitle}</Text>
             </LinearGradient>
