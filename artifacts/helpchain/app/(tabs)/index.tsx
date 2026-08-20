@@ -5,6 +5,7 @@ import {
   Alert,
   ActivityIndicator,
   Image,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -29,6 +30,49 @@ import { usePresence } from "@/context/PresenceContext";
 import { useColors } from "@/hooks/useColors";
 
 const logo = require("@/assets/images/logo.jpeg");
+
+const SOUTH_AFRICA_EMERGENCY_SERVICES = [
+  {
+    key: "police",
+    emoji: "👮",
+    name: "South African Police",
+    number: "10111",
+    description: "Crime, danger, or immediate police assistance",
+    color: "#2563EB",
+  },
+  {
+    key: "ambulance-fire",
+    emoji: "🚑",
+    name: "Ambulance & Fire",
+    number: "10177",
+    description: "Medical emergency, ambulance, or fire rescue",
+    color: "#DC2626",
+  },
+  {
+    key: "mobile-emergency",
+    emoji: "📱",
+    name: "Mobile Emergency",
+    number: "112",
+    description: "Emergency services from a mobile phone",
+    color: "#7C3AED",
+  },
+  {
+    key: "er24",
+    emoji: "❤️",
+    name: "ER24",
+    number: "084 124",
+    description: "Private ambulance and medical response",
+    color: "#0F766E",
+  },
+  {
+    key: "netcare-911",
+    emoji: "🏥",
+    name: "Netcare 911",
+    number: "082 911",
+    description: "Private emergency medical response",
+    color: "#EA580C",
+  },
+] as const;
 
 /* ─── shared helpers ─── */
 function timeAgo(iso: string): string {
@@ -477,6 +521,7 @@ export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [donateVisible, setDonateVisible] = useState(false);
+  const [emergencyVisible, setEmergencyVisible] = useState(false);
   const [selectedItem, setSelectedItem] = useState<{ type: string; icon: string } | null>(null);
   const [selectedQty, setSelectedQty] = useState<number | null>(null);
   const [donateNote, setDonateNote] = useState("");
@@ -487,6 +532,32 @@ export default function HomeScreen() {
   function tap(action: () => void) {
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     action();
+  }
+
+  async function callEmergencyService(
+    service: (typeof SOUTH_AFRICA_EMERGENCY_SERVICES)[number]
+  ) {
+    const phoneNumber = service.number.replace(/\s/g, "");
+    const callUrl = `tel:${phoneNumber}`;
+
+    try {
+      const canCall = await Linking.canOpenURL(callUrl);
+      if (!canCall) {
+        Alert.alert(
+          "Calling unavailable",
+          `Your device cannot open the phone app. Please call ${service.number} manually.`
+        );
+        return;
+      }
+
+      setEmergencyVisible(false);
+      await Linking.openURL(callUrl);
+    } catch {
+      Alert.alert(
+        "Could not start call",
+        `Please call ${service.number} manually for ${service.name}.`
+      );
+    }
   }
 
   const greeting = () => {
@@ -506,7 +577,7 @@ export default function HomeScreen() {
       shortTitle: "Emergency",
       sub: "Get urgent help now",
       colors: ["#DC2626", "#B91C1C"] as [string, string],
-      onPress: () => tap(() => router.push("/request/new?emergency=1" as any)),
+      onPress: () => tap(() => setEmergencyVisible(true)),
     },
     {
       key: "community",
@@ -642,6 +713,89 @@ export default function HomeScreen() {
           <CommunityFeed />
         </View>
       </ScrollView>
+
+      {/* Emergency service chooser */}
+      <Modal
+        visible={emergencyVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setEmergencyVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.emergencyModal, { backgroundColor: colors.card }]}>
+            <View style={styles.modalHandle} />
+            <View style={styles.emergencyModalHeader}>
+              <View style={styles.emergencyHeaderIcon}>
+                <Text style={styles.emergencyHeaderEmoji}>🚨</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.emergencyModalTitle, { color: colors.foreground }]}>
+                  Emergency Assistance
+                </Text>
+                <Text style={[styles.emergencyModalSub, { color: colors.mutedForeground }]}>
+                  South Africa emergency services
+                </Text>
+              </View>
+              <Pressable
+                onPress={() => setEmergencyVisible(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Close emergency services"
+                style={[styles.emergencyClose, { backgroundColor: colors.background }]}
+              >
+                <Text style={[styles.emergencyCloseText, { color: colors.mutedForeground }]}>×</Text>
+              </Pressable>
+            </View>
+
+            <Text style={[styles.emergencyPrompt, { color: colors.foreground }]}>
+              Tap a service to call now
+            </Text>
+
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.emergencyServiceList}
+            >
+              {SOUTH_AFRICA_EMERGENCY_SERVICES.map((service) => (
+                <Pressable
+                  key={service.key}
+                  onPress={() => callEmergencyService(service)}
+                  style={({ pressed }) => [
+                    styles.emergencyService,
+                    {
+                      backgroundColor: colors.background,
+                      borderColor: colors.border,
+                      opacity: pressed ? 0.75 : 1,
+                    },
+                  ]}
+                >
+                  <View style={[styles.emergencyServiceEmojiWrap, { backgroundColor: service.color + "18" }]}>
+                    <Text style={styles.emergencyServiceEmoji}>{service.emoji}</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.emergencyServiceName, { color: colors.foreground }]}>
+                      {service.name}
+                    </Text>
+                    <Text style={[styles.emergencyServiceDescription, { color: colors.mutedForeground }]}>
+                      {service.description}
+                    </Text>
+                    <Text style={[styles.emergencyServiceNumber, { color: service.color }]}>
+                      Call {service.number}
+                    </Text>
+                  </View>
+                  <Text style={[styles.emergencyServiceArrow, { color: service.color }]}>›</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+
+            <View style={styles.emergencyNote}>
+              <Text style={styles.emergencyNoteIcon}>📍</Text>
+              <Text style={styles.emergencyNoteText}>
+                Tapping a number opens your phone’s call screen. Tell the operator your exact location;
+                Android may share emergency location when your device and network support it.
+              </Text>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Donate Modal */}
       <Modal visible={donateVisible} transparent animationType="slide">
@@ -1113,6 +1267,112 @@ const styles = StyleSheet.create({
   actionTitle: { color: "#fff", fontSize: 15, fontFamily: "Inter_700Bold", textAlign: "center" },
   actionSub: { color: "rgba(255,255,255,0.72)", fontSize: 11, fontFamily: "Inter_400Regular", textAlign: "center" },
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
+  emergencyModal: {
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
+    paddingHorizontal: 18,
+    paddingBottom: 26,
+    maxHeight: "88%",
+  },
+  emergencyModalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 11,
+    paddingTop: 18,
+    paddingBottom: 14,
+  },
+  emergencyHeaderIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    backgroundColor: "#FEE2E2",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emergencyHeaderEmoji: { fontSize: 24 },
+  emergencyModalTitle: {
+    fontSize: 19,
+    fontFamily: "Inter_700Bold",
+  },
+  emergencyModalSub: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    marginTop: 2,
+  },
+  emergencyClose: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emergencyCloseText: {
+    fontSize: 27,
+    fontFamily: "Inter_400Regular",
+    lineHeight: 30,
+  },
+  emergencyPrompt: {
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+    marginBottom: 10,
+  },
+  emergencyServiceList: {
+    gap: 9,
+    paddingBottom: 12,
+  },
+  emergencyService: {
+    minHeight: 80,
+    borderWidth: 1,
+    borderRadius: 15,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  emergencyServiceEmojiWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emergencyServiceEmoji: { fontSize: 22 },
+  emergencyServiceName: {
+    fontSize: 14,
+    fontFamily: "Inter_700Bold",
+  },
+  emergencyServiceDescription: {
+    fontSize: 10,
+    lineHeight: 14,
+    fontFamily: "Inter_400Regular",
+    marginTop: 2,
+  },
+  emergencyServiceNumber: {
+    fontSize: 13,
+    fontFamily: "Inter_700Bold",
+    marginTop: 4,
+  },
+  emergencyServiceArrow: {
+    fontSize: 28,
+    fontFamily: "Inter_400Regular",
+  },
+  emergencyNote: {
+    flexDirection: "row",
+    gap: 8,
+    borderRadius: 12,
+    backgroundColor: "#FFF7ED",
+    padding: 11,
+    alignItems: "flex-start",
+  },
+  emergencyNoteIcon: { fontSize: 16 },
+  emergencyNoteText: {
+    flex: 1,
+    color: "#9A3412",
+    fontSize: 10,
+    lineHeight: 15,
+    fontFamily: "Inter_400Regular",
+  },
   donateModal: { borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: "hidden", gap: 16, paddingBottom: 24 },
   modalHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: "#E2E8F0", alignSelf: "center", marginTop: 12 },
   modalHeader: { alignItems: "center", padding: 24, gap: 12 },
