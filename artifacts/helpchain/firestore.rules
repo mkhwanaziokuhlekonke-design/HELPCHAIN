@@ -79,6 +79,18 @@ service cloud.firestore {
       allow delete: if callerIsAdmin();
     }
 
+    // ── Emergency Alerts ────────────────────────────────────────────────
+    match /emergencyAlerts/{alertId} {
+      // A user may create an alert only under their own identity. Admins can
+      // monitor every alert and its location; users can only read their own.
+      allow create: if isSignedIn()
+        && request.resource.data.userId == request.auth.uid;
+      allow read: if callerIsAdmin() || (
+        isSignedIn() && resource.data.userId == request.auth.uid
+      );
+      allow update, delete: if callerIsAdmin();
+    }
+
     // ── Presence (live location + online status) ───────────────────────
     match /presence/{userId} {
       allow read:  if isSignedIn();

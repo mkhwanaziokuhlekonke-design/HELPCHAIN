@@ -18,6 +18,7 @@ import { Platform, View, StyleSheet } from "react-native";
 import { useLocation } from "@/context/LocationContext";
 import { useHelp, HelpRequest } from "@/context/HelpContext";
 import { useDonations } from "@/context/DonationContext";
+import { useEmergencyAlerts } from "@/context/EmergencyAlertContext";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -67,7 +68,7 @@ const MAP_HTML = `<!DOCTYPE html>
 var map = L.map('map',{zoomControl:true,attributionControl:false}).setView([51.505,-0.09],13);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
 
-var uMarkers={}, rMarkers={}, dMarkers={};
+ var uMarkers={}, rMarkers={}, dMarkers={}, eMarkers={};
 var hasView=false;
 var nd=document.getElementById('nodata');
 function hideND(){if(nd)nd.style.display='none';}
@@ -156,12 +157,45 @@ function renderDonations(donations){
   });
 }
 
+ /* ── Emergency alert markers (pulsing red) ── */
+ function renderEmergencies(alerts){
+   Object.keys(eMarkers).forEach(function(id){
+     if(!alerts.find(function(a){return a.id===id;})){
+       map.removeLayer(eMarkers[id]);delete eMarkers[id];
+     }
+   });
+   alerts.forEach(function(a){
+     if(eMarkers[a.id]){
+       eMarkers[a.id].setLatLng([a.lat,a.lng]);
+     } else {
+       var icon=L.divIcon({
+         className:'',
+         html:'<div style="position:relative;width:42px;height:42px;display:flex;align-items:center;justify-content:center;">'
+           +'<div style="position:absolute;inset:-6px;border:2px solid #DC2626;border-radius:50%;animation:ring 1.1s ease-out infinite;"></div>'
+           +'<div style="width:32px;height:32px;background:#DC2626;border:3px solid #fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;box-shadow:0 2px 10px rgba(220,38,38,.65);">🚨</div>'
+           +'</div>',
+         iconSize:[42,42],iconAnchor:[21,21]
+       });
+       eMarkers[a.id]=L.marker([a.lat,a.lng],{icon:icon,zIndexOffset:400}).addTo(map)
+         .bindPopup(
+           '<b style="color:#DC2626">EMERGENCY ALERT</b><br>'
+           +'<b>'+a.userName+'</b><br>'
+           +'<span style="color:#64748B;font-size:11px">Calling '+a.serviceName+' · '+a.serviceNumber+'</span>'
+           +(a.address?'<br><span style="color:#94A3B8;font-size:10px">'+a.address+'</span>':'')
+         );
+     }
+     if(!hasView){map.setView([a.lat,a.lng],14);hasView=true;}
+     hideND();
+   });
+ }
+
 /* ── Message dispatch ── */
 function onMsg(data){
   if(!data)return;
   if(data.type==='UPDATE_LOCATIONS')renderUsers(data.users||[]);
   if(data.type==='UPDATE_REQUESTS')renderRequests(data.requests||[]);
   if(data.type==='UPDATE_DONATIONS')renderDonations(data.donations||[]);
+   if(data.type==='UPDATE_EMERGENCIES')renderEmergencies(data.alerts||[]);
 }
 function handle(e){
   try{var d=typeof e.data==='string'?JSON.parse(e.data):e.data;onMsg(d);}catch(err){}
@@ -182,6 +216,7 @@ export function AdminActivityMap({ height = 300 }: AdminActivityMapProps) {
   const { userLocations } = useLocation();
   const { requests } = useHelp();
   const { donations } = useDonations();
+  const { emergencyAlerts } = useEmergencyAlerts();
 
   const iframeRef = useRef<any>(null);
   const webViewRef = useRef<any>(null);
@@ -230,6 +265,21 @@ export function AdminActivityMap({ height = 300 }: AdminActivityMapProps) {
     return JSON.stringify({ type: "UPDATE_DONATIONS", donations: items });
   }, [donations]);
 
+  const emergenciesPayload = useCallback(() => {
+    const alerts = emergencyAlerts
+      .filter((alert) => alert.location)
+      .map((alert) => ({
+        id: alert.id,
+        userName: alert.userName,
+        serviceName: alert.serviceName,
+        serviceNumber: alert.serviceNumber,
+        lat: alert.location!.latitude,
+        lng: alert.location!.longitude,
+        address: alert.location?.address ?? "",
+      }));
+    return JSON.stringify({ type: "UPDATE_EMERGENCIES", alerts });
+  }, [emergencyAlerts]);
+
   // ── Push to embedded Leaflet ───────────────────────────────────────
   function push(payload: string) {
     if (Platform.OS === "web") {
@@ -256,12 +306,14 @@ export function AdminActivityMap({ height = 300 }: AdminActivityMapProps) {
       push(locationPayload());
       push(requestsPayload());
       push(donationsPayload());
+      push(emergenciesPayload());
     }, 350);
   }
 
   useEffect(() => { if (ready) push(locationPayload()); }, [userLocations, ready]);
   useEffect(() => { if (ready) push(requestsPayload()); }, [requests, ready]);
   useEffect(() => { if (ready) push(donationsPayload()); }, [donations, ready]);
+  useEffect(() => { if (ready) push(emergenciesPayload()); }, [emergencyAlerts, ready]);
 
   // ── Web render (iframe) ────────────────────────────────────────────
   if (Platform.OS === "web") {

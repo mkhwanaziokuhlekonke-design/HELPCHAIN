@@ -23,6 +23,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
 import { useChat } from "@/context/ChatContext";
 import { useDonations } from "@/context/DonationContext";
+import { useEmergencyAlerts } from "@/context/EmergencyAlertContext";
 import { useHelp } from "@/context/HelpContext";
 import { useLocation } from "@/context/LocationContext";
 import { AdminActivityMap } from "@/components/AdminActivityMap";
@@ -224,6 +225,7 @@ export default function AdminScreen() {
   const { donations, totalItems } = useDonations();
   const { messages } = useChat();
   const { userLocations } = useLocation();
+  const { emergencyAlerts } = useEmergencyAlerts();
 
   const [section, setSection] = useState<Section>("dashboard");
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -840,11 +842,14 @@ export default function AdminScreen() {
           const openReqs = requests.filter((r) => r.status === "open" || r.status === "accepted");
           const emergencyReqs = requests.filter((r) => r.isEmergency && r.status !== "completed" && r.status !== "cancelled");
           const geoReqs = requests.filter((r) => r.location && r.status !== "cancelled");
+           const activeEmergencyAlerts = emergencyAlerts.length;
+           const geolocatedAlerts = emergencyAlerts.filter((alert) => alert.location).length;
 
           // ── Combined activity feed: requests + donations, newest first ──
           type ActivityItem =
             | { kind: "request"; id: string; title: string; status: string; isEmergency: boolean; category: string; location?: { address?: string }; time: string }
-            | { kind: "donation"; id: string; donorName: string; itemType: string; itemIcon: string; quantity: number; time: string };
+             | { kind: "donation"; id: string; donorName: string; itemType: string; itemIcon: string; quantity: number; time: string }
+             | { kind: "emergency"; id: string; userName: string; userPhone?: string; serviceName: string; serviceNumber: string; location?: { address?: string }; time: string };
 
           const feedItems: ActivityItem[] = [
             ...requests.map((r) => ({
@@ -866,6 +871,16 @@ export default function AdminScreen() {
               quantity: d.quantity,
               time: d.createdAt,
             })),
+             ...emergencyAlerts.map((alert) => ({
+               kind: "emergency" as const,
+               id: alert.id,
+               userName: alert.userName,
+               userPhone: alert.userPhone,
+               serviceName: alert.serviceName,
+               serviceNumber: alert.serviceNumber,
+               location: alert.location,
+               time: alert.createdAt,
+             })),
           ]
             .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
             .slice(0, 25);
@@ -873,8 +888,8 @@ export default function AdminScreen() {
           const statChips = [
             { label: "Online", value: onlineCount, color: "#10B981", icon: "radio" as const },
             { label: "Active", value: openReqs.length, color: BLUE_LIGHT, icon: "activity" as const },
-            { label: "Emergency", value: emergencyReqs.length, color: "#EF4444", icon: "alert-circle" as const },
-            { label: "Geolocated", value: geoReqs.length, color: "#F59E0B", icon: "map-pin" as const },
+             { label: "Alerts", value: emergencyReqs.length + activeEmergencyAlerts, color: "#EF4444", icon: "alert-circle" as const },
+             { label: "Geolocated", value: geoReqs.length + geolocatedAlerts, color: "#F59E0B", icon: "map-pin" as const },
           ];
 
           return (
@@ -913,7 +928,8 @@ export default function AdminScreen() {
                 <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: "#F1F5F9" }}>
                   {[
                     { color: "#3B82F6", label: "User online" },
-                    { color: "#EF4444", label: "Emergency" },
+                     { color: "#DC2626", label: "Emergency alert" },
+                     { color: "#EF4444", label: "Emergency request" },
                     { color: "#F59E0B", label: "Open request" },
                     { color: "#14B8A6", label: "Being helped" },
                     { color: "#94A3B8", label: "Completed" },
@@ -963,6 +979,41 @@ export default function AdminScreen() {
                               <Text style={[styles.requestLoc, { flex: 1 }]} numberOfLines={1}>{item.location.address}</Text>
                             )}
                           </View>
+                        </View>
+                        <Text style={styles.reportTime}>{timeAgo(item.time)}</Text>
+                      </View>
+                    );
+                  }
+
+                  if (item.kind === "emergency") {
+                    return (
+                      <View
+                        key={item.id}
+                        style={[
+                          styles.requestRow,
+                          {
+                            alignItems: "flex-start",
+                            backgroundColor: "#FEF2F2",
+                            borderRadius: 12,
+                            paddingHorizontal: 10,
+                            paddingVertical: 9,
+                          },
+                        ]}
+                      >
+                        <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: "#FEE2E2", alignItems: "center", justifyContent: "center", marginTop: 1 }}>
+                          <Text style={{ fontSize: 14 }}>🚨</Text>
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.requestName, { color: "#991B1B" }]} numberOfLines={1}>
+                            Emergency alert from {item.userName}
+                          </Text>
+                          <Text style={[styles.requestLoc, { color: "#B91C1C", marginTop: 2 }]} numberOfLines={1}>
+                            Calling {item.serviceName} · {item.serviceNumber}
+                          </Text>
+                          <Text style={[styles.requestLoc, { marginTop: 2 }]} numberOfLines={1}>
+                            {item.location?.address ?? "Location unavailable"}
+                            {item.userPhone ? ` · ${item.userPhone}` : ""}
+                          </Text>
                         </View>
                         <Text style={styles.reportTime}>{timeAgo(item.time)}</Text>
                       </View>

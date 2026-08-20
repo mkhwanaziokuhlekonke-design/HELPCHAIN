@@ -26,6 +26,8 @@ import { useAuth } from "@/context/AuthContext";
 import { useHelp } from "@/context/HelpContext";
 import { useChat } from "@/context/ChatContext";
 import { useDonations } from "@/context/DonationContext";
+import { useEmergencyAlerts } from "@/context/EmergencyAlertContext";
+import { useLocation } from "@/context/LocationContext";
 import { usePresence } from "@/context/PresenceContext";
 import { useColors } from "@/hooks/useColors";
 
@@ -517,6 +519,8 @@ export default function HomeScreen() {
   const colors = useColors();
   const { user } = useAuth();
   const { addDonation } = useDonations();
+  const { createEmergencyAlert } = useEmergencyAlerts();
+  const { myCoords } = useLocation();
   const { activeCount } = usePresence();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -539,6 +543,57 @@ export default function HomeScreen() {
   ) {
     const phoneNumber = service.number.replace(/\s/g, "");
     const callUrl = `tel:${phoneNumber}`;
+
+    // Persist the emergency alert in the background. The call itself must not
+    // wait for network, geocoding, or a fresh GPS reading.
+    void (async () => {
+      let location:
+        | { latitude: number; longitude: number; address?: string }
+        | undefined = myCoords
+        ? { latitude: myCoords.latitude, longitude: myCoords.longitude }
+        : undefined;
+
+      if (!location) {
+        try {
+          const permission = await Location.requestForegroundPermissionsAsync();
+          if (permission.status === "granted") {
+            const position = await Location.getCurrentPositionAsync({
+              accuracy: Location.Accuracy.High,
+            });
+            let address: string | undefined;
+            try {
+              const places = await Location.reverseGeocodeAsync({
+                latitude: position.coords.latitude,
+                longitude: position.coords.longitude,
+              });
+              if (places[0]) {
+                const place = places[0];
+                address = [place.name, place.street, place.city, place.region]
+                  .filter(Boolean)
+                  .join(", ");
+              }
+            } catch {}
+
+            location = {
+              latitude: position.coords.latitude,
+              longitude: position.coords.longitude,
+              address,
+            }
+          }
+        } catch {}
+      }
+
+      try {
+        await createEmergencyAlert({
+          serviceKey: service.key,
+          serviceName: service.name,
+          serviceNumber: service.number,
+          location,
+        });
+      } catch (error) {
+        console.warn("[Emergency] Could not save admin alert:", error);
+      }
+    })();
 
     try {
       const canCall = await Linking.canOpenURL(callUrl);
