@@ -15,13 +15,12 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
-import { Feather, Ionicons } from "@expo/vector-icons";
+import { Feather } from "@expo/vector-icons";
 import Svg, { Circle, Path, Line as SvgLine, Text as SvgText, G } from "react-native-svg";
 import * as Haptics from "expo-haptics";
 import * as Location from "expo-location";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { UserAvatar } from "@/components/UserAvatar";
-import { LiveLocationMap } from "@/components/LiveLocationMap";
 import { useAuth } from "@/context/AuthContext";
 import { useHelp } from "@/context/HelpContext";
 import { useChat } from "@/context/ChatContext";
@@ -572,52 +571,81 @@ export default function HomeScreen() {
     );
   }
 
-  // ── User view: full-screen map ─────────────────────────────────────────────
-  // Floating buttons sit just above the tab bar
-  const TAB_BAR_H = Platform.OS === "web" ? 84 : 49;
-  const btnBottom = Platform.OS === "web" ? TAB_BAR_H + 12 : TAB_BAR_H + insets.bottom + 12;
-
   return (
-    <View style={{ flex: 1 }}>
-      {/* ── Full-screen map ── */}
-      <LiveLocationMap fullScreen />
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={[styles.communityScroll, { paddingTop: topPad, paddingBottom: bottomPad }]}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* ── Community Center header ── */}
+        <LinearGradient colors={["#1F2937", "#1D4ED8"]} style={styles.communityHeader}>
+          <View style={styles.communityHeaderTop}>
+            <View style={styles.greetingCol}>
+              <Text style={styles.communityGreeting}>{greeting()}</Text>
+              <Text style={styles.communityName}>{user?.name?.split(" ")[0] ?? "Friend"}</Text>
+              <View style={styles.activeRow}>
+                <View style={styles.activeDot} />
+                <Text style={styles.communityActiveText}>
+                  {activeCount > 0
+                    ? `${activeCount} member${activeCount === 1 ? "" : "s"} active`
+                    : "Community online"}
+                </Text>
+              </View>
+            </View>
+            <UserAvatar name={user?.name ?? "U"} size={48} />
+          </View>
+          <Text style={styles.communityTitle}>COMMUNITY CENTER</Text>
+          <Text style={styles.communitySubtitle}>
+            Connect, support one another, and make a difference together.
+          </Text>
+        </LinearGradient>
 
-      {/* ── Top greeting card ── */}
-      <View style={[styles.topOverlay, { top: topPad }]} pointerEvents="box-none">
-        <View style={styles.greetingCard}>
-          <View style={styles.greetingCol}>
-            <Text style={styles.greetingSmall}>{greeting()},</Text>
-            <Text style={styles.greetingName}>{user?.name?.split(" ")[0] ?? "Friend"}</Text>
-            <View style={styles.activeRow}>
-              <View style={styles.activeDot} />
-              <Text style={styles.activeText}>
-                {activeCount > 0
-                  ? `${activeCount} member${activeCount === 1 ? "" : "s"} active`
-                  : "Community online"}
+        <View style={styles.communityBody}>
+          {/* ── Main actions ── */}
+          <View style={styles.sectionHeading}>
+            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>How can we help?</Text>
+            <Text style={[styles.sectionHint, { color: colors.mutedForeground }]}>Choose an action</Text>
+          </View>
+          <View style={styles.actionGrid}>
+            {ACTION_BUTTONS.map((btn) => (
+              <Pressable
+                key={btn.key}
+                onPress={btn.onPress}
+                style={({ pressed }) => [styles.centerAction, { opacity: pressed ? 0.82 : 1 }]}
+              >
+                <LinearGradient colors={btn.colors} style={styles.centerActionInner}>
+                  <View style={styles.centerIconRing}>
+                    <Text style={styles.centerEmoji}>{btn.emoji}</Text>
+                  </View>
+                  <Text style={styles.centerActionTitle}>{btn.title}</Text>
+                  <Text style={styles.centerActionSub}>{btn.sub}</Text>
+                </LinearGradient>
+              </Pressable>
+            ))}
+          </View>
+
+          {/* ── Community status ── */}
+          <View style={[styles.communityStatus, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={styles.communityStatusIcon}>
+              <Text style={styles.communityStatusEmoji}>🤝</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.communityStatusTitle, { color: colors.foreground }]}>Our community is here</Text>
+              <Text style={[styles.communityStatusSub, { color: colors.mutedForeground }]}>
+                {activeCount > 0 ? `${activeCount} people are active right now` : "People are ready to help"}
               </Text>
             </View>
+            <View style={styles.onlineBadge}>
+              <View style={styles.activeDot} />
+              <Text style={styles.onlineBadgeText}>LIVE</Text>
+            </View>
           </View>
-          <UserAvatar name={user?.name ?? "U"} size={44} />
-        </View>
-      </View>
 
-      {/* ── Floating action buttons at bottom ── */}
-      <View style={[styles.floatingBar, { bottom: btnBottom }]}>
-        {ACTION_BUTTONS.map((btn) => (
-          <Pressable
-            key={btn.key}
-            onPress={btn.onPress}
-            style={({ pressed }) => [styles.floatBtn, { opacity: pressed ? 0.85 : 1 }]}
-          >
-            <LinearGradient colors={btn.colors} style={styles.floatBtnInner}>
-              <View style={styles.floatIconRing}>
-                <Text style={styles.floatEmoji}>{btn.emoji}</Text>
-              </View>
-              <Text style={styles.floatLabel}>{btn.shortTitle}</Text>
-            </LinearGradient>
-          </Pressable>
-        ))}
-      </View>
+          {/* ── Live community activity ── */}
+          <CommunityFeed />
+        </View>
+      </ScrollView>
 
       {/* Donate Modal */}
       <Modal visible={donateVisible} transparent animationType="slide">
@@ -854,6 +882,167 @@ const styles = StyleSheet.create({
   adminBtn: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20 },
   adminBtnText: { color: "#fff", fontSize: 12, fontFamily: "Inter_600SemiBold" },
   scroll: { padding: 16, gap: 16 },
+  communityScroll: {
+    flexGrow: 1,
+  },
+  communityHeader: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 22,
+    borderBottomLeftRadius: 26,
+    borderBottomRightRadius: 26,
+  },
+  communityHeaderTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  communityGreeting: {
+    fontSize: 17,
+    fontFamily: "Inter_700Bold",
+    color: "#fff",
+    letterSpacing: 0.4,
+  },
+  communityName: {
+    fontSize: 24,
+    fontFamily: "Inter_700Bold",
+    color: "#fff",
+    marginTop: 2,
+  },
+  communityActiveText: {
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
+    color: "#A7F3D0",
+  },
+  communityTitle: {
+    fontSize: 22,
+    fontFamily: "Inter_700Bold",
+    color: "#fff",
+    letterSpacing: 1,
+    marginTop: 22,
+  },
+  communitySubtitle: {
+    fontSize: 13,
+    lineHeight: 19,
+    fontFamily: "Inter_400Regular",
+    color: "rgba(255,255,255,0.75)",
+    marginTop: 5,
+    maxWidth: 320,
+  },
+  communityBody: {
+    padding: 16,
+    gap: 14,
+  },
+  sectionHeading: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    marginTop: 2,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontFamily: "Inter_700Bold",
+  },
+  sectionHint: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+  },
+  actionGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  centerAction: {
+    width: "48%",
+    minHeight: 142,
+    borderRadius: 18,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.16,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  centerActionInner: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 8,
+    paddingVertical: 14,
+    gap: 5,
+  },
+  centerIconRing: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.26)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.48)",
+    marginBottom: 2,
+  },
+  centerEmoji: {
+    fontSize: 25,
+    lineHeight: 31,
+  },
+  centerActionTitle: {
+    color: "#fff",
+    fontSize: 14,
+    fontFamily: "Inter_700Bold",
+    textAlign: "center",
+  },
+  centerActionSub: {
+    color: "rgba(255,255,255,0.78)",
+    fontSize: 10,
+    fontFamily: "Inter_400Regular",
+    textAlign: "center",
+  },
+  communityStatus: {
+    minHeight: 72,
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  communityStatusIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#ECFDF5",
+  },
+  communityStatusEmoji: {
+    fontSize: 23,
+  },
+  communityStatusTitle: {
+    fontSize: 13,
+    fontFamily: "Inter_700Bold",
+  },
+  communityStatusSub: {
+    fontSize: 11,
+    fontFamily: "Inter_400Regular",
+    marginTop: 3,
+  },
+  onlineBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#ECFDF5",
+    borderRadius: 20,
+    paddingHorizontal: 7,
+    paddingVertical: 5,
+  },
+  onlineBadgeText: {
+    fontSize: 9,
+    fontFamily: "Inter_700Bold",
+    color: "#059669",
+    letterSpacing: 0.5,
+  },
   // full-screen map overlay
   topOverlay: {
     position: "absolute",
