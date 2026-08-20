@@ -25,11 +25,12 @@ import { UserAvatar } from "@/components/UserAvatar";
 import { useAuth } from "@/context/AuthContext";
 import { useHelp } from "@/context/HelpContext";
 import { useChat } from "@/context/ChatContext";
-import { useDonations } from "@/context/DonationContext";
+import { DonationDestination, useDonations } from "@/context/DonationContext";
 import { useEmergencyAlerts } from "@/context/EmergencyAlertContext";
 import { useLocation } from "@/context/LocationContext";
 import { usePresence } from "@/context/PresenceContext";
 import { useColors } from "@/hooks/useColors";
+import { DonationCentersMap } from "@/components/DonationCentersMap";
 
 const logo = require("@/assets/images/logo.jpeg");
 
@@ -529,6 +530,7 @@ export default function HomeScreen() {
   const [selectedItem, setSelectedItem] = useState<{ type: string; icon: string } | null>(null);
   const [selectedQty, setSelectedQty] = useState<number | null>(null);
   const [donateNote, setDonateNote] = useState("");
+  const [selectedDestination, setSelectedDestination] = useState<DonationDestination | null>(null);
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const bottomPad = Platform.OS === "web" ? 84 : insets.bottom + 50;
@@ -659,7 +661,10 @@ export default function HomeScreen() {
       shortTitle: "Donate",
       sub: "Support HelpChain",
       colors: ["#0EA5E9", "#0284C7"] as [string, string],
-      onPress: () => tap(() => setDonateVisible(true)),
+      onPress: () => tap(() => {
+        setSelectedDestination(null);
+        setDonateVisible(true);
+      }),
     },
   ];
 
@@ -865,7 +870,16 @@ export default function HomeScreen() {
                 </Text>
               </LinearGradient>
 
-              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 16, paddingHorizontal: 20, paddingBottom: 12 }}>
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={{ gap: 16, paddingHorizontal: 20, paddingBottom: 12 }}
+              >
+                <DonationCentersMap
+                  selectedDestination={selectedDestination}
+                  onSelectDestination={setSelectedDestination}
+                />
+
                 {/* Category picker */}
                 <Text style={[styles.donateLabel, { color: colors.foreground }]}>What would you like to donate?</Text>
                 <View style={styles.itemGrid}>
@@ -946,13 +960,22 @@ export default function HomeScreen() {
                       Alert.alert("Not signed in", "Please sign in to donate.");
                       return;
                     }
+                    if (!selectedDestination) {
+                      Alert.alert(
+                        "Choose a destination",
+                        "Please select a nearby church or community center for your donation."
+                      );
+                      return;
+                    }
                     const qty = selectedQty ?? 1;
                     const itemSnapshot = { ...selectedItem };
                     const noteSnapshot = donateNote;
+                    const destinationSnapshot = { ...selectedDestination };
                     setDonateVisible(false);
                     setSelectedItem(null);
                     setSelectedQty(null);
                     setDonateNote("");
+                    setSelectedDestination(null);
                     try {
                       // ── Capture donor GPS (best-effort — donation proceeds even if denied) ──
                       let donorLocation: { latitude: number; longitude: number; address?: string } | undefined;
@@ -982,10 +1005,19 @@ export default function HomeScreen() {
                           };
                         }
                       } catch {}
-                      await addDonation(user.id, user.name, itemSnapshot.type, itemSnapshot.icon, qty, noteSnapshot || undefined, donorLocation);
+                      await addDonation(
+                        user.id,
+                        user.name,
+                        itemSnapshot.type,
+                        itemSnapshot.icon,
+                        qty,
+                        noteSnapshot || undefined,
+                        donorLocation,
+                        destinationSnapshot
+                      );
                       Alert.alert(
                         "Thank you! 🙏",
-                        `Your donation of ${qty} ${itemSnapshot.type} item${qty !== 1 ? "s" : ""} has been registered. Our team will contact you for pickup.`
+                        `Your donation of ${qty} ${itemSnapshot.type} item${qty !== 1 ? "s" : ""} has been registered for ${destinationSnapshot.name}. Use Navigate to get directions.`
                       );
                     } catch {
                       Alert.alert("Donation Failed", "Could not save your donation. Please check your connection and try again.");
@@ -1000,7 +1032,13 @@ export default function HomeScreen() {
                 </Pressable>
 
                 <Pressable
-                  onPress={() => { setDonateVisible(false); setSelectedItem(null); setSelectedQty(null); setDonateNote(""); }}
+                  onPress={() => {
+                    setDonateVisible(false);
+                    setSelectedItem(null);
+                    setSelectedQty(null);
+                    setDonateNote("");
+                    setSelectedDestination(null);
+                  }}
                   style={styles.cancelBtn}
                 >
                   <Text style={[styles.cancelText, { color: colors.mutedForeground }]}>Cancel</Text>

@@ -16,6 +16,15 @@ export interface DonationLocation {
   address?: string;
 }
 
+export interface DonationDestination {
+  id: string;
+  name: string;
+  type: "church" | "center";
+  latitude: number;
+  longitude: number;
+  address?: string;
+}
+
 export interface Donation {
   id: string;
   donorId: string;
@@ -27,6 +36,8 @@ export interface Donation {
   createdAt: string;
   /** GPS position of the donor at the time of donation (optional — only set when permission granted) */
   location?: DonationLocation;
+  /** Chosen donation destination, selected from nearby churches/community centres. */
+  destination?: DonationDestination;
 }
 
 interface DonationContextType {
@@ -38,7 +49,8 @@ interface DonationContextType {
     itemIcon: string,
     quantity: number,
     description?: string,
-    location?: DonationLocation
+    location?: DonationLocation,
+    destination?: DonationDestination
   ) => Promise<void>;
   totalItems: number;
 }
@@ -79,7 +91,8 @@ export function DonationProvider({ children }: { children: React.ReactNode }) {
     itemIcon: string,
     quantity: number,
     description?: string,
-    location?: DonationLocation
+    location?: DonationLocation,
+    destination?: DonationDestination
   ) {
     try {
       await addDoc(collection(db, "donations"), {
@@ -90,6 +103,7 @@ export function DonationProvider({ children }: { children: React.ReactNode }) {
         quantity,
         description: description ?? "",
         ...(location ? { location } : {}),
+        ...(destination ? { destination } : {}),
         createdAt: new Date().toISOString(),
         _serverTs: serverTimestamp(),
       });

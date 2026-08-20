@@ -1,0 +1,1 @@
+- [Nearby map data](nearby-map-data.md) — Browser map searches use the API proxy because direct Overpass requests are blocked by CORS.
