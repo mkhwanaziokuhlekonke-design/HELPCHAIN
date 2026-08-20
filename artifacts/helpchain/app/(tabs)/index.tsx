@@ -500,13 +500,13 @@ export default function HomeScreen() {
 
   const ACTION_BUTTONS = [
     {
-      key: "request",
-      emoji: "🙋",
-      title: "Request Help",
-      shortTitle: "Request",
-      sub: "Post a help request",
-      colors: ["#2563EB", "#1D4ED8"] as [string, string],
-      onPress: () => tap(() => router.push("/request/new" as any)),
+      key: "emergency-assistance",
+      emoji: "🚨",
+      title: "Emergency Assistance",
+      shortTitle: "Emergency",
+      sub: "Get urgent help now",
+      colors: ["#DC2626", "#B91C1C"] as [string, string],
+      onPress: () => tap(() => router.push("/request/new?emergency=1" as any)),
     },
     {
       key: "community",
