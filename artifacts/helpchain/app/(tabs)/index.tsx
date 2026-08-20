@@ -595,10 +595,6 @@ export default function HomeScreen() {
             </View>
             <UserAvatar name={user?.name ?? "U"} size={48} />
           </View>
-          <Text style={styles.communityTitle}>COMMUNITY CENTER</Text>
-          <Text style={styles.communitySubtitle}>
-            Connect, support one another, and make a difference together.
-          </Text>
         </LinearGradient>
 
         <View style={styles.communityBody}>
