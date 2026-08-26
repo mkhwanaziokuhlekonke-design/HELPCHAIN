@@ -36,6 +36,7 @@ function RootLayoutNav() {
       <Stack.Screen name="(auth)" options={{ headerShown: false }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="admin" options={{ headerShown: false, presentation: "modal" }} />
+      <Stack.Screen name="community-centres" options={{ headerShown: false }} />
       <Stack.Screen name="request/new" options={{ headerShown: false, presentation: "modal" }} />
       <Stack.Screen name="request/[id]" options={{ headerShown: false }} />
     </Stack>

@@ -30,7 +30,6 @@ import { useEmergencyAlerts } from "@/context/EmergencyAlertContext";
 import { useLocation } from "@/context/LocationContext";
 import { usePresence } from "@/context/PresenceContext";
 import { useColors } from "@/hooks/useColors";
-import { CommunityCentersMap } from "@/components/CommunityCentersMap";
 import { DonationCentersMap } from "@/components/DonationCentersMap";
 
 const logo = require("@/assets/images/logo.jpeg");
@@ -532,7 +531,6 @@ export default function HomeScreen() {
   const [selectedQty, setSelectedQty] = useState<number | null>(null);
   const [donateNote, setDonateNote] = useState("");
   const [selectedDestination, setSelectedDestination] = useState<DonationDestination | null>(null);
-  const [communityVisible, setCommunityVisible] = useState(false);
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const bottomPad = Platform.OS === "web" ? 84 : insets.bottom + 50;
@@ -645,7 +643,7 @@ export default function HomeScreen() {
       shortTitle: "Community",
       sub: "Connect with your community",
       colors: ["#7C3AED", "#6D28D9"] as [string, string],
-      onPress: () => tap(() => setCommunityVisible(true)),
+      onPress: () => tap(() => router.push("/community-centres" as any)),
     },
     {
       key: "chat",
@@ -855,44 +853,6 @@ export default function HomeScreen() {
                 Android may share emergency location when your device and network support it.
               </Text>
             </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Community centre map */}
-      <Modal
-        visible={communityVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setCommunityVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.communityModal, { backgroundColor: colors.card }]}>
-            <View style={styles.modalHandle} />
-            <View style={styles.communityModalHeader}>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.communityModalTitle, { color: colors.foreground }]}>
-                  Community Centre
-                </Text>
-                <Text style={[styles.communityModalSub, { color: colors.mutedForeground }]}>
-                  Find a place to give back in West Acres
-                </Text>
-              </View>
-              <Pressable
-                onPress={() => setCommunityVisible(false)}
-                accessibilityRole="button"
-                accessibilityLabel="Close community centre map"
-                style={[styles.emergencyClose, { backgroundColor: colors.background }]}
-              >
-                <Text style={[styles.emergencyCloseText, { color: colors.mutedForeground }]}>×</Text>
-              </Pressable>
-            </View>
-            <ScrollView
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ paddingHorizontal: 18, paddingBottom: 24 }}
-            >
-              <CommunityCentersMap />
-            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -1505,29 +1465,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     lineHeight: 15,
     fontFamily: "Inter_400Regular",
-  },
-  communityModal: {
-    borderTopLeftRadius: 26,
-    borderTopRightRadius: 26,
-    paddingBottom: 26,
-    maxHeight: "92%",
-  },
-  communityModalHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 11,
-    paddingHorizontal: 18,
-    paddingTop: 18,
-    paddingBottom: 14,
-  },
-  communityModalTitle: {
-    fontSize: 20,
-    fontFamily: "Inter_700Bold",
-  },
-  communityModalSub: {
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
-    marginTop: 3,
   },
   donateModal: { borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: "hidden", gap: 16, paddingBottom: 24 },
   modalHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: "#E2E8F0", alignSelf: "center", marginTop: 12 },

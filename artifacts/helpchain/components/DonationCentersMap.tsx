@@ -14,6 +14,7 @@ import * as Location from "expo-location";
 import { DonationDestination } from "@/context/DonationContext";
 import { useLocation } from "@/context/LocationContext";
 import { useColors } from "@/hooks/useColors";
+import { WEST_ACRES_CENTERS, WEST_ACRES_REFERENCE } from "@/constants/communityCenters";
 
 let WebView: any = null;
 if (Platform.OS !== "web") {
@@ -40,6 +41,18 @@ function distanceKm(
 
 function formatDistance(km: number) {
   return km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(1)} km`;
+}
+
+function westAcresDonationCenters(origin: { latitude: number; longitude: number }): NearbyPlace[] {
+  return WEST_ACRES_CENTERS.map((center) => ({
+    id: center.id,
+    name: center.name,
+    type: "center",
+    latitude: center.latitude,
+    longitude: center.longitude,
+    address: center.address,
+    distanceKm: distanceKm(origin, center),
+  }));
 }
 
 function makeAddress(tags: Record<string, string>) {
@@ -133,14 +146,16 @@ export function DonationCentersMap({
   const colors = useColors();
   const { myCoords } = useLocation();
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const [origin, setOrigin] = useState<{ latitude: number; longitude: number } | null>(myCoords);
+  const [origin, setOrigin] = useState<{ latitude: number; longitude: number }>(
+    myCoords ?? WEST_ACRES_REFERENCE
+  );
   const [places, setPlaces] = useState<NearbyPlace[]>([]);
   const [loading, setLoading] = useState(false);
   const [locationLoading, setLocationLoading] = useState(false);
   const [areaQuery, setAreaQuery] = useState("");
   const [areaSearching, setAreaSearching] = useState(false);
   const [message, setMessage] = useState<string | null>(
-    myCoords ? null : "Use your location to find nearby donation destinations."
+    myCoords ? null : "Showing the two West Acres community centres. Use your location to find places near you."
   );
 
   useEffect(() => {
@@ -161,6 +176,8 @@ export function DonationCentersMap({
     async function findPlaces() {
       setLoading(true);
       setMessage(null);
+      const pinnedCenters = westAcresDonationCenters(searchOrigin);
+      setPlaces(pinnedCenters);
       try {
         const domain = process.env.EXPO_PUBLIC_DOMAIN;
         if (!domain) throw new Error("HelpChain API domain is unavailable");
@@ -170,7 +187,9 @@ export function DonationCentersMap({
         );
         if (!response.ok) throw new Error("Nearby places are unavailable");
         const data = await response.json();
-        const unique = new Map<string, NearbyPlace>();
+        const unique = new Map<string, NearbyPlace>(
+          pinnedCenters.map((center) => [center.id, center])
+        );
 
         for (const item of data.elements ?? []) {
           const tags = (item.tags ?? {}) as Record<string, string>;
@@ -201,8 +220,10 @@ export function DonationCentersMap({
         }
       } catch (error: any) {
         if (error?.name !== "AbortError") {
-          setPlaces([]);
-          setMessage("Could not load nearby donation destinations. Please check your connection and try again.");
+          setPlaces(pinnedCenters);
+          setMessage(
+            "Other nearby donation points could not load. You can still choose either West Acres community centre."
+          );
         }
       } finally {
         if (!controller.signal.aborted) setLoading(false);
@@ -318,13 +339,13 @@ export function DonationCentersMap({
   }, [places, onSelectDestination]);
 
   async function navigateTo(place: NearbyPlace) {
-    const label = encodeURIComponent(place.name);
-    const fallbackUrl = `https://www.google.com/maps/dir/?api=1&destination=${place.latitude},${place.longitude}&travelmode=driving`;
+    const destination = encodeURIComponent(`${place.name}, ${place.address ?? ""}`);
+    const fallbackUrl = `https://www.google.com/maps/dir/?api=1&destination=${destination}&travelmode=driving`;
     const nativeUrl =
       Platform.OS === "ios"
-        ? `maps://maps.apple.com/?daddr=${place.latitude},${place.longitude}&dirflg=d&q=${label}`
+        ? `maps://maps.apple.com/?daddr=${destination}&dirflg=d`
         : Platform.OS === "android"
-          ? `google.navigation:q=${place.latitude},${place.longitude}&mode=d`
+          ? `google.navigation:q=${destination}&mode=d`
           : fallbackUrl;
 
     try {
@@ -336,15 +357,15 @@ export function DonationCentersMap({
   }
 
   return (
-    <View style={[styles.card, { backgroundColor: colors.secondary, borderColor: colors.border }]}>
+      <View style={[styles.card, { backgroundColor: colors.secondary, borderColor: colors.border }]}>
       <View style={styles.header}>
         <View style={[styles.headerIcon, { backgroundColor: colors.tealLight }]}>
           <Feather name="map-pin" size={18} color={colors.teal} />
         </View>
         <View style={styles.headerText}>
           <Text style={[styles.title, { color: colors.foreground }]}>Choose a donation destination</Text>
-          <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
-            Churches and community centers near you
+            <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
+            West Acres centres plus donation points near you
           </Text>
         </View>
         <Pressable
