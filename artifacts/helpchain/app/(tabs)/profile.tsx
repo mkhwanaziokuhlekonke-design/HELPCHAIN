@@ -1,6 +1,7 @@
 import { useRouter } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
-import React, { useState } from "react";
+import { Feather } from "@expo/vector-icons";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -17,17 +18,18 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { UserAvatar } from "@/components/UserAvatar";
 import { useAuth } from "@/context/AuthContext";
+import { useDonations } from "@/context/DonationContext";
 import { useHelp } from "@/context/HelpContext";
 import { useColors } from "@/hooks/useColors";
 
-/* ── simple emoji menu item (no icon font needed) ── */
+/* ── Profile menu item ── */
 function MenuItem({
-  emoji,
+  icon,
   label,
   onPress,
   danger,
 }: {
-  emoji: string;
+  icon: keyof typeof Feather.glyphMap;
   label: string;
   onPress: () => void;
   danger?: boolean;
@@ -41,8 +43,8 @@ function MenuItem({
         { backgroundColor: colors.card, opacity: pressed ? 0.8 : 1, borderBottomColor: colors.border },
       ]}
     >
-      <View style={[styles.menuIcon, { backgroundColor: danger ? "#FEE2E2" : colors.primary + "18" }]}>
-        <Text style={{ fontSize: 18 }}>{emoji}</Text>
+      <View style={[styles.menuIcon, { backgroundColor: danger ? "#F8FAFC" : colors.primary + "18" }]}>
+        <Feather name={icon} size={17} color={danger ? colors.destructive : colors.primary} />
       </View>
       <Text style={[styles.menuLabel, { color: danger ? colors.destructive : colors.foreground }]}>
         {label}
@@ -57,31 +59,54 @@ function EditProfileModal({
   visible,
   initialName,
   initialPhone,
+  initialEmail,
   onSave,
   onClose,
 }: {
   visible: boolean;
   initialName: string;
   initialPhone: string;
-  onSave: (name: string, phone: string) => Promise<void>;
+  initialEmail: string;
+  onSave: (name: string, phone: string, email: string, password?: string) => Promise<void>;
   onClose: () => void;
 }) {
   const colors = useColors();
   const [name, setName] = useState(initialName);
   const [phone, setPhone] = useState(initialPhone);
+  const [email, setEmail] = useState(initialEmail);
+  const [password, setPassword] = useState("");
   const [saving, setSaving] = useState(false);
+  const emailChanged = email.trim().toLowerCase() !== initialEmail.toLowerCase();
+
+  useEffect(() => {
+    if (visible) {
+      setName(initialName);
+      setPhone(initialPhone);
+      setEmail(initialEmail);
+      setPassword("");
+    }
+  }, [visible, initialName, initialPhone, initialEmail]);
 
   async function handleSave() {
     if (!name.trim()) {
       Alert.alert("Name required", "Please enter your full name.");
       return;
     }
+    if (!email.trim()) {
+      Alert.alert("Email required", "Please enter your email address.");
+      return;
+    }
+    if (emailChanged && !password) {
+      Alert.alert("Password required", "Enter your current password to confirm the email change.");
+      return;
+    }
     setSaving(true);
     try {
-      await onSave(name.trim(), phone.trim());
+      await onSave(name.trim(), phone.trim(), email.trim(), password || undefined);
       onClose();
-    } catch {
-      Alert.alert("Error", "Could not save changes. Please try again.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not save changes. Please try again.";
+      Alert.alert("Could not update profile", message);
     } finally {
       setSaving(false);
     }
@@ -95,7 +120,7 @@ function EditProfileModal({
 
           <Text style={[edit.title, { color: colors.foreground }]}>Edit Profile</Text>
           <Text style={[edit.sub, { color: colors.mutedForeground }]}>
-            Update your name and phone number
+            Update your name, phone number, or email
           </Text>
 
           {/* Name */}
@@ -120,6 +145,33 @@ function EditProfileModal({
             style={[edit.input, { borderColor: colors.border, color: colors.foreground, backgroundColor: colors.background }]}
           />
 
+          <Text style={[edit.label, { color: colors.foreground }]}>Email Address</Text>
+          <TextInput
+            value={email}
+            onChangeText={setEmail}
+            placeholder="you@example.com"
+            placeholderTextColor={colors.mutedForeground}
+            autoCapitalize="none"
+            keyboardType="email-address"
+            autoComplete="email"
+            style={[edit.input, { borderColor: colors.border, color: colors.foreground, backgroundColor: colors.background }]}
+          />
+
+          {emailChanged && (
+            <>
+              <Text style={[edit.label, { color: colors.foreground }]}>Current Password</Text>
+              <TextInput
+                value={password}
+                onChangeText={setPassword}
+                placeholder="Confirm your current password"
+                placeholderTextColor={colors.mutedForeground}
+                secureTextEntry
+                autoComplete="current-password"
+                style={[edit.input, { borderColor: colors.border, color: colors.foreground, backgroundColor: colors.background }]}
+              />
+            </>
+          )}
+
           {/* Save */}
           <Pressable
             onPress={handleSave}
@@ -127,7 +179,7 @@ function EditProfileModal({
             style={[edit.saveBtn, { backgroundColor: colors.primary, opacity: saving ? 0.7 : 1 }]}
           >
             {saving
-              ? <ActivityIndicator color="#fff" />
+              ? <ActivityIndicator color="#FFFFFF" />
               : <Text style={edit.saveBtnText}>Save Changes</Text>
             }
           </Pressable>
@@ -145,18 +197,20 @@ function EditProfileModal({
 export default function ProfileScreen() {
   const colors = useColors();
   const { user, logout, updateProfilePhoto, updateProfileName } = useAuth();
+  const { donations, loading: donationsLoading, error: donationsError } = useDonations();
   const { requests } = useHelp();
+  const userDonations = donations.filter((donation) => donation.donorId === user?.id);
+  const userEmergencyRequests = requests
+    .filter((request) => request.requesterId === user?.id && request.isEmergency)
+    .slice(0, 3);
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [editVisible, setEditVisible] = useState(false);
+  const [donationsVisible, setDonationsVisible] = useState(false);
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const bottomPad = Platform.OS === "web" ? 84 : insets.bottom + 50;
-
-  const myRequests = requests.filter((r) => r.requesterId === user?.id);
-  const helpedCount = requests.filter((r) => r.helperId === user?.id).length;
-  const completedCount = myRequests.filter((r) => r.status === "completed").length;
 
   async function handlePickPhoto() {
     try {
@@ -197,18 +251,13 @@ export default function ProfileScreen() {
     }
   }
 
-  function confirmLogout() {
-    Alert.alert("Sign Out", "Are you sure you want to sign out?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Sign Out",
-        style: "destructive",
-        onPress: async () => {
-          await logout();
-          router.replace("/(auth)/portal" as any);
-        },
-      },
-    ]);
+  async function confirmLogout() {
+    try {
+      await logout();
+      router.replace("/(auth)/portal" as any);
+    } catch {
+      Alert.alert("Sign Out Failed", "Could not sign out. Please try again.");
+    }
   }
 
   if (!user) {
@@ -222,14 +271,14 @@ export default function ProfileScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       {/* ── Header ── */}
-      <LinearGradient colors={["#1F2937", "#2563EB"]} style={[styles.headerGrad, { paddingTop: topPad }]}>
+      <LinearGradient colors={["#0F2747", "#2563EB"]} style={[styles.headerGrad, { paddingTop: topPad }]}>
         {/* Avatar */}
         <Pressable onPress={handlePickPhoto} disabled={uploadingPhoto} style={styles.avatarWrap}>
           <UserAvatar name={user.name} size={86} isAdmin={user.isAdmin} photoURL={user.photoURL} />
           <View style={styles.cameraBadge}>
             {uploadingPhoto
-              ? <ActivityIndicator size="small" color="#fff" />
-              : <Text style={{ fontSize: 13 }}>📷</Text>
+              ? <ActivityIndicator size="small" color="#FFFFFF" />
+              : <Feather name="camera" size={14} color="#FFFFFF" />
             }
           </View>
         </Pressable>
@@ -262,42 +311,104 @@ export default function ProfileScreen() {
         contentContainerStyle={[styles.scroll, { paddingBottom: bottomPad }]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Stats */}
-        <View style={[styles.statsRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          {[
-            { label: "Requests", value: myRequests.length, emoji: "🙋" },
-            { label: "Helped", value: helpedCount, emoji: "🤝" },
-            { label: "Completed", value: completedCount, emoji: "✅" },
-          ].map((s, i) => (
-            <View
-              key={s.label}
-              style={[styles.statItem, i < 2 && { borderRightWidth: 1, borderRightColor: colors.border }]}
-            >
-              <Text style={{ fontSize: 20, marginBottom: 2 }}>{s.emoji}</Text>
-              <Text style={[styles.statValue, { color: colors.primary }]}>{s.value}</Text>
-              <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>{s.label}</Text>
-            </View>
-          ))}
-        </View>
-
         {/* Menu */}
         <View style={[styles.menuGroup, { borderColor: colors.border }]}>
           {user.isAdmin && (
-            <MenuItem emoji="⚙️" label="Admin Dashboard" onPress={() => router.push("/admin" as any)} />
+            <MenuItem icon="grid" label="Admin Dashboard" onPress={() => router.push("/admin" as any)} />
           )}
-          <MenuItem emoji="✏️" label="Edit Profile" onPress={() => setEditVisible(true)} />
-          <MenuItem emoji="📷" label="Change Profile Photo" onPress={handlePickPhoto} />
-          <MenuItem emoji="📋" label="My Requests" onPress={() => router.push("/(tabs)/requests" as any)} />
-          <MenuItem emoji="💬" label="Community Chat" onPress={() => router.push("/(tabs)/chat" as any)} />
-          <MenuItem emoji="🔔" label="Notifications" onPress={() => router.push("/(tabs)/notifications" as any)} />
-          <MenuItem emoji="📍" label="Update Location" onPress={() => router.push("/(auth)/location" as any)} />
+          <MenuItem icon="edit-3" label="Edit Profile" onPress={() => setEditVisible(true)} />
+          <MenuItem icon="camera" label="Change Profile Photo" onPress={handlePickPhoto} />
+          {user.isAdmin && (
+            <MenuItem icon="message-circle" label="Community Chat" onPress={() => router.push("/(tabs)/chat" as any)} />
+          )}
+          <MenuItem icon="map-pin" label="Update Location" onPress={() => router.push("/(auth)/location" as any)} />
+          <MenuItem
+            icon="gift"
+            label="Items Donated"
+            onPress={() => setDonationsVisible((visible) => !visible)}
+          />
+        </View>
+
+        {donationsVisible && (
+          <View style={[styles.donationsGroup, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Text style={[styles.donationsTitle, { color: colors.foreground }]}>Items You Donated</Text>
+            {donationsLoading ? (
+              <ActivityIndicator color={colors.primary} />
+            ) : donationsError ? (
+              <Text accessibilityRole="alert" style={[styles.donationsEmpty, { color: colors.destructive }]}>{donationsError}</Text>
+            ) : userDonations.length === 0 ? (
+              <Text style={[styles.donationsEmpty, { color: colors.mutedForeground }]}>Your donated items will appear here.</Text>
+            ) : userDonations.map((donation) => (
+              <View key={donation.id} style={[styles.donationRow, { borderTopColor: colors.border }]}>
+                <View style={[styles.donationIcon, { backgroundColor: colors.primary + "18" }]}>
+                  <Feather name="gift" size={17} color={colors.primary} />
+                </View>
+                <View style={{ flex: 1, gap: 3 }}>
+                  <Text style={[styles.donationItem, { color: colors.foreground }]}>{donation.itemType}</Text>
+                  <Text style={[styles.donationsEmpty, { color: colors.mutedForeground }]}>
+                    {donation.destination?.name ?? "Centre unavailable"} · {donation.status}
+                  </Text>
+                  <Text style={[styles.donationsEmpty, { color: colors.mutedForeground }]}>
+                    {new Date(donation.createdAt).toLocaleDateString()}
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
+
+        <View style={[styles.requestGroup, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <View style={styles.requestGroupHeading}>
+            <View style={[styles.requestGroupIcon, { backgroundColor: colors.secondary }]}>
+              <Feather name="alert-triangle" size={17} color={colors.primary} />
+            </View>
+            <View style={{ flex: 1, gap: 3 }}>
+              <Text style={[styles.donationsTitle, { color: colors.foreground }]}>My emergency requests</Text>
+              <Text style={[styles.donationsEmpty, { color: colors.mutedForeground }]}>Track your recent requests</Text>
+            </View>
+          </View>
+          {userEmergencyRequests.length ? userEmergencyRequests.map((request) => {
+            const statusLabel = request.status === "open"
+              ? "Pending"
+              : request.status === "accepted"
+                ? "In Progress"
+                : request.status === "completed"
+                  ? "Resolved"
+                  : "Cancelled";
+            const statusColor = request.status === "completed"
+              ? colors.darkTeal
+              : request.status === "accepted"
+                ? colors.primary
+                : request.status === "cancelled"
+                  ? colors.mutedForeground
+                  : "#F59E0B";
+            return (
+              <Pressable
+                key={request.id}
+                onPress={() => router.push(`/request/${request.id}` as any)}
+                accessibilityRole="button"
+                style={[styles.requestRow, { borderTopColor: colors.border }]}
+              >
+                <View style={{ flex: 1, gap: 3 }}>
+                  <Text style={[styles.donationItem, { color: colors.foreground }]} numberOfLines={1}>{request.title}</Text>
+                  <Text style={[styles.donationsEmpty, { color: colors.mutedForeground }]}>{request.category}</Text>
+                </View>
+                <View style={[styles.requestBadge, { backgroundColor: `${statusColor}18` }]}>
+                  <Text style={[styles.requestBadgeText, { color: statusColor }]}>{statusLabel}</Text>
+                </View>
+                <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+              </Pressable>
+            );
+          }) : (
+            <Text style={[styles.donationsEmpty, { color: colors.mutedForeground }]}>Emergency requests you create will appear here.</Text>
+          )}
         </View>
 
         <Pressable
           onPress={confirmLogout}
           style={({ pressed }) => [styles.logoutBtn, { borderColor: colors.destructive + "60", opacity: pressed ? 0.8 : 1 }]}
         >
-          <Text style={{ fontSize: 18 }}>🚪</Text>
+          <Feather name="log-out" size={18} color={colors.destructive} />
           <Text style={[styles.logoutText, { color: colors.destructive }]}>Sign Out</Text>
         </Pressable>
       </ScrollView>
@@ -307,6 +418,7 @@ export default function ProfileScreen() {
         visible={editVisible}
         initialName={user.name}
         initialPhone={user.phone ?? ""}
+        initialEmail={user.email}
         onSave={updateProfileName}
         onClose={() => setEditVisible(false)}
       />
@@ -336,7 +448,7 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     backgroundColor: "#2563EB",
     borderWidth: 2,
-    borderColor: "#1F2937",
+    borderColor: "#0F2747",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -349,7 +461,7 @@ const styles = StyleSheet.create({
   userName: {
     fontSize: 22,
     fontFamily: "Inter_700Bold",
-    color: "#fff",
+    color: "#FFFFFF",
     textAlign: "center",
   },
   userEmail: {
@@ -393,31 +505,50 @@ const styles = StyleSheet.create({
   editBtnText: {
     fontSize: 13,
     fontFamily: "Inter_600SemiBold",
-    color: "#fff",
+    color: "#FFFFFF",
   },
   scroll: {
     padding: 16,
     gap: 14,
   },
-  statsRow: {
-    flexDirection: "row",
-    borderRadius: 16,
+  requestGroup: { borderWidth: 1, borderRadius: 18, padding: 16, gap: 10, shadowColor: "#0B1F3A", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
+  requestGroupHeading: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 2 },
+  requestGroupIcon: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  requestRow: { minHeight: 52, flexDirection: "row", alignItems: "center", gap: 10, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth },
+  requestBadge: { borderRadius: 20, paddingHorizontal: 9, paddingVertical: 5 },
+  requestBadgeText: { fontSize: 10, fontFamily: "Inter_700Bold" },
+  donationsGroup: {
     borderWidth: 1,
-    overflow: "hidden",
+    borderRadius: 16,
+    padding: 16,
+    gap: 10,
   },
-  statItem: {
-    flex: 1,
-    alignItems: "center",
-    paddingVertical: 16,
-    gap: 2,
-  },
-  statValue: {
-    fontSize: 22,
+  donationsTitle: {
+    fontSize: 16,
     fontFamily: "Inter_700Bold",
   },
-  statLabel: {
-    fontSize: 11,
+  donationsEmpty: {
+    fontSize: 12,
+    lineHeight: 18,
     fontFamily: "Inter_400Regular",
+  },
+  donationRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  donationIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  donationItem: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
   },
   menuGroup: {
     borderRadius: 16,
@@ -477,7 +608,7 @@ const edit = StyleSheet.create({
     width: 36,
     height: 4,
     borderRadius: 2,
-    backgroundColor: "#CBD5E1",
+    backgroundColor: "#DBEAFE",
     alignSelf: "center",
     marginBottom: 8,
   },
@@ -513,7 +644,7 @@ const edit = StyleSheet.create({
     marginTop: 4,
   },
   saveBtnText: {
-    color: "#fff",
+    color: "#FFFFFF",
     fontSize: 16,
     fontFamily: "Inter_600SemiBold",
   },

@@ -1,11 +1,13 @@
 import { BlurView } from "expo-blur";
 import { isLiquidGlassAvailable } from "expo-glass-effect";
 import { Tabs, useRouter } from "expo-router";
-import { Icon, Label, NativeTabs } from "expo-router/unstable-native-tabs";
+import { NativeTabs } from "expo-router/unstable-native-tabs";
 import { SymbolView } from "expo-symbols";
+import { Feather } from "@expo/vector-icons";
 import React, { useEffect } from "react";
 import {
   ActivityIndicator,
+  ColorValue,
   Platform,
   StyleSheet,
   Text,
@@ -16,43 +18,50 @@ import { useAuth } from "@/context/AuthContext";
 import { useNotifications } from "@/context/NotificationContext";
 import { useColors } from "@/hooks/useColors";
 
-/* Emoji tab icons — OS-rendered, zero font dependency, works on all Android versions */
-function EmojiIcon({ emoji, focused, color }: { emoji: string; focused: boolean; color: string }) {
+function TabIcon({
+  name,
+  focused,
+  color,
+}: {
+  name: keyof typeof Feather.glyphMap;
+  focused: boolean;
+  color: ColorValue;
+}) {
   return (
-    <Text style={{ fontSize: 22, opacity: focused ? 1 : 0.55, lineHeight: 28 }}>
-      {emoji}
-    </Text>
+    <Feather name={name} size={21} color={color} style={{ opacity: focused ? 1 : 0.65 }} />
   );
 }
 
-function NativeTabLayout() {
+function NativeTabLayout({ isAdmin }: { isAdmin: boolean }) {
   return (
     <NativeTabs>
       <NativeTabs.Trigger name="index">
-        <Icon sf={{ default: "house", selected: "house.fill" }} />
-        <Label>Home</Label>
+        <NativeTabs.Trigger.Icon sf={{ default: "house", selected: "house.fill" }} />
+        <NativeTabs.Trigger.Label>Home</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="requests">
-        <Icon sf={{ default: "person.2", selected: "person.2.fill" }} />
-        <Label>Requests</Label>
+      <NativeTabs.Trigger name="donation">
+        <NativeTabs.Trigger.Icon sf={{ default: "gift", selected: "gift.fill" }} />
+        <NativeTabs.Trigger.Label>Donation</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="chat">
-        <Icon sf={{ default: "message.circle", selected: "message.circle.fill" }} />
-        <Label>Chat</Label>
-      </NativeTabs.Trigger>
+      {isAdmin && (
+        <NativeTabs.Trigger name="chat">
+          <NativeTabs.Trigger.Icon sf={{ default: "message.circle", selected: "message.circle.fill" }} />
+          <NativeTabs.Trigger.Label>Chat</NativeTabs.Trigger.Label>
+        </NativeTabs.Trigger>
+      )}
       <NativeTabs.Trigger name="notifications">
-        <Icon sf={{ default: "bell", selected: "bell.fill" }} />
-        <Label>Alerts</Label>
+        <NativeTabs.Trigger.Icon sf={{ default: "bell", selected: "bell.fill" }} />
+        <NativeTabs.Trigger.Label>Alerts</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="profile">
-        <Icon sf={{ default: "person.circle", selected: "person.circle.fill" }} />
-        <Label>Profile</Label>
+        <NativeTabs.Trigger.Icon sf={{ default: "person.circle", selected: "person.circle.fill" }} />
+        <NativeTabs.Trigger.Label>Profile</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
     </NativeTabs>
   );
 }
 
-function ClassicTabLayout() {
+function ClassicTabLayout({ isAdmin }: { isAdmin: boolean }) {
   const colors = useColors();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
@@ -94,31 +103,33 @@ function ClassicTabLayout() {
             isIOS ? (
               <SymbolView name="house" tintColor={color} size={24} />
             ) : (
-              <EmojiIcon emoji="🏠" focused={focused} color={color} />
+              <TabIcon name="home" focused={focused} color={color} />
             ),
         }}
       />
       <Tabs.Screen
-        name="requests"
+        name="donation"
         options={{
-          title: "Requests",
+          title: "Donation",
           tabBarIcon: ({ color, focused }) =>
             isIOS ? (
-              <SymbolView name="person.2" tintColor={color} size={24} />
+              <SymbolView name="gift" tintColor={color} size={24} />
             ) : (
-              <EmojiIcon emoji="🙋" focused={focused} color={color} />
+              <TabIcon name="gift" focused={focused} color={color} />
             ),
         }}
       />
+      <Tabs.Screen name="requests" options={{ href: null }} />
       <Tabs.Screen
         name="chat"
         options={{
           title: "Chat",
+          href: isAdmin ? undefined : null,
           tabBarIcon: ({ color, focused }) =>
             isIOS ? (
               <SymbolView name="message.circle" tintColor={color} size={24} />
             ) : (
-              <EmojiIcon emoji="💬" focused={focused} color={color} />
+              <TabIcon name="message-circle" focused={focused} color={color} />
             ),
         }}
       />
@@ -131,7 +142,7 @@ function ClassicTabLayout() {
             isIOS ? (
               <SymbolView name="bell" tintColor={color} size={24} />
             ) : (
-              <EmojiIcon emoji="🔔" focused={focused} color={color} />
+              <TabIcon name="bell" focused={focused} color={color} />
             ),
         }}
       />
@@ -143,7 +154,7 @@ function ClassicTabLayout() {
             isIOS ? (
               <SymbolView name="person.circle" tintColor={color} size={24} />
             ) : (
-              <EmojiIcon emoji="👤" focused={focused} color={color} />
+              <TabIcon name="user" focused={focused} color={color} />
             ),
         }}
       />
@@ -154,25 +165,26 @@ function ClassicTabLayout() {
 export default function TabLayout() {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const colors = useColors();
 
   // Auth guard — unauthenticated users should never reach the tabs
   useEffect(() => {
     if (!loading && !user) {
-      router.replace("/(auth)/portal" as any);
+      router.replace("/(auth)/login" as any);
     }
   }, [user, loading]);
 
   // Block render until we know auth state
   if (loading || !user) {
     return (
-      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#fff" }}>
-        <ActivityIndicator size="large" color="#2563EB" />
+      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.background }}>
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
 
   if (isLiquidGlassAvailable()) {
-    return <NativeTabLayout />;
+    return <NativeTabLayout isAdmin={user.isAdmin} />;
   }
-  return <ClassicTabLayout />;
+  return <ClassicTabLayout isAdmin={user.isAdmin} />;
 }

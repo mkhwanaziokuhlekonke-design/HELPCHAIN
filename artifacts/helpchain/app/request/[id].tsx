@@ -22,6 +22,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useHelp } from "@/context/HelpContext";
 import { useLocation } from "@/context/LocationContext";
 import { useNotifications } from "@/context/NotificationContext";
+import { REPORT_REASONS, ReportReason, useReports } from "@/context/ReportContext";
 import { useColors } from "@/hooks/useColors";
 
 function timeAgo(dateStr: string) {
@@ -35,10 +36,10 @@ function timeAgo(dateStr: string) {
 }
 
 const STATUS_COLORS = {
-  open: { text: "#16A34A", bg: "#F0FDF4" },
-  accepted: { text: "#1B4FD8", bg: "#EFF6FF" },
-  completed: { text: "#64748B", bg: "#F1F5F9" },
-  cancelled: { text: "#DC2626", bg: "#FEF2F2" },
+  open: { text: "#10B981", bg: "#ECFDF5" },
+  accepted: { text: "#2563EB", bg: "#EFF6FF" },
+  completed: { text: "#64748B", bg: "#F8FAFC" },
+  cancelled: { text: "#EF4444", bg: "#F8FAFC" },
 };
 
 export default function RequestDetailScreen() {
@@ -47,11 +48,16 @@ export default function RequestDetailScreen() {
   const { getRequestById, offerHelp, completeRequest, cancelRequest } = useHelp();
   const { user, updateUserStats } = useAuth();
   const { addNotification } = useNotifications();
+  const { createReport } = useReports();
   const { myCoords, userLocations } = useLocation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(false);
   const [showNavMap, setShowNavMap] = useState(false);
+  const [reportVisible, setReportVisible] = useState(false);
+  const [reportReason, setReportReason] = useState<ReportReason>(REPORT_REASONS[0]);
+  const [reportSubmitting, setReportSubmitting] = useState(false);
+  const [reportMessage, setReportMessage] = useState<string | null>(null);
 
   const request = getRequestById(id);
 
@@ -82,6 +88,20 @@ export default function RequestDetailScreen() {
   const canOffer = request.status === "open" && !isRequester;
   const canComplete = (isRequester || isHelper || user?.isAdmin) && request.status === "accepted";
   const canCancel = (isRequester || user?.isAdmin) && (request.status === "open" || request.status === "accepted");
+
+  async function handleSubmitReport() {
+    if (!user || !request || reportSubmitting) return;
+    setReportSubmitting(true);
+    try {
+      await createReport({ requestId: request.id, requestTitle: request.title, reason: reportReason });
+      setReportVisible(false);
+      setReportMessage("Report submitted to HelpChain administrators.");
+    } catch {
+      setReportMessage("The report could not be submitted. Check your connection and try again.");
+    } finally {
+      setReportSubmitting(false);
+    }
+  }
 
   // Resolve destination: pinned location first, then requester's live GPS from presence
   const liveRequesterLoc = userLocations.find((u) => u.uid === request.requesterId);
@@ -156,16 +176,16 @@ export default function RequestDetailScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <LinearGradient
-        colors={request.isEmergency ? ["#7F1D1D", "#DC2626"] : ["#0F172A", "#1B4FD8"]}
+        colors={["#0F2747", "#2563EB"]}
         style={[styles.header, { paddingTop: topPad }]}
       >
         <View style={styles.headerRow}>
           <Pressable onPress={() => router.back()} style={styles.backBtn}>
-            <Feather name="arrow-left" size={22} color="#fff" />
+            <Feather name="arrow-left" size={22} color="#FFFFFF" />
           </Pressable>
           {request.isEmergency && (
             <View style={styles.emergencyPill}>
-              <Feather name="alert-triangle" size={12} color="#fff" />
+              <Feather name="alert-triangle" size={12} color="#FFFFFF" />
               <Text style={styles.emergencyPillText}>EMERGENCY</Text>
             </View>
           )}
@@ -260,11 +280,11 @@ export default function RequestDetailScreen() {
               </View>
             ) : (
               <View style={{ height: 120, alignItems: "center", justifyContent: "center", gap: 6 }}>
-                <Feather name="map-pin" size={24} color="#94A3B8" />
-                <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: "#94A3B8", textAlign: "center" }}>
+                <Feather name="map-pin" size={24} color="#64748B" />
+                <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: "#64748B", textAlign: "center" }}>
                   Waiting for {request.requesterName}'s location…
                 </Text>
-                <Text style={{ fontSize: 11, fontFamily: "Inter_400Regular", color: "#CBD5E1", textAlign: "center" }}>
+                <Text style={{ fontSize: 11, fontFamily: "Inter_400Regular", color: "#DBEAFE", textAlign: "center" }}>
                   They'll appear on the map when their GPS is active
                 </Text>
               </View>
@@ -315,37 +335,47 @@ export default function RequestDetailScreen() {
             />
           ) : (
             /* No destination yet — waiting for live GPS */
-            <View style={{ flex: 1, backgroundColor: "#0F172A", alignItems: "center", justifyContent: "center", gap: 16, padding: 32 }}>
+            <View style={{ flex: 1, backgroundColor: "#1E3A5F", alignItems: "center", justifyContent: "center", gap: 16, padding: 32 }}>
               <View style={{ width: 72, height: 72, borderRadius: 36, backgroundColor: "#1E3A5F", alignItems: "center", justifyContent: "center" }}>
-                <Feather name="map-pin" size={32} color="#60A5FA" />
+                <Feather name="map-pin" size={32} color="#2563EB" />
               </View>
-              <Text style={{ fontSize: 20, fontFamily: "Inter_700Bold", color: "#F1F5F9", textAlign: "center" }}>
+              <Text style={{ fontSize: 20, fontFamily: "Inter_700Bold", color: "#F8FAFC", textAlign: "center" }}>
                 Locating {request.requesterName}…
               </Text>
-              <Text style={{ fontSize: 14, fontFamily: "Inter_400Regular", color: "#94A3B8", textAlign: "center", lineHeight: 22 }}>
+              <Text style={{ fontSize: 14, fontFamily: "Inter_400Regular", color: "#64748B", textAlign: "center", lineHeight: 22 }}>
                 Navigation will start as soon as their location is available. Make sure they have location sharing enabled.
               </Text>
-              <ActivityIndicator color="#60A5FA" style={{ marginTop: 8 }} />
+              <ActivityIndicator color="#2563EB" style={{ marginTop: 8 }} />
               <Pressable
                 onPress={() => setShowNavMap(false)}
-                style={{ marginTop: 16, backgroundColor: "#1E293B", paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 }}
+                style={{ marginTop: 16, backgroundColor: "#1E3A5F", paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 }}
               >
-                <Text style={{ color: "#94A3B8", fontFamily: "Inter_500Medium", fontSize: 15 }}>Close</Text>
+                <Text style={{ color: "#64748B", fontFamily: "Inter_500Medium", fontSize: 15 }}>Close</Text>
               </Pressable>
             </View>
           )}
         </Modal>
 
         <View style={styles.actions}>
+          {user && !isRequester && !user.isAdmin && (
+            <Pressable
+              onPress={() => { setReportMessage(null); setReportVisible(true); }}
+              disabled={reportSubmitting}
+              style={({ pressed }) => [styles.actionBtnOutline, { borderColor: colors.border, opacity: pressed ? 0.75 : 1 }]}
+            >
+              <Feather name="flag" size={17} color={colors.mutedForeground} />
+              <Text style={[styles.actionBtnOutlineText, { color: colors.mutedForeground }]}>Report Request</Text>
+            </Pressable>
+          )}
           {canOffer && (
             <Pressable
               onPress={handleOfferHelp}
               disabled={loading}
               style={({ pressed }) => [styles.actionBtn, { backgroundColor: colors.accent, opacity: pressed || loading ? 0.85 : 1 }]}
             >
-              {loading ? <ActivityIndicator color="#fff" /> : (
+              {loading ? <ActivityIndicator color="#FFFFFF" /> : (
                 <>
-                  <Feather name="heart" size={18} color="#fff" />
+                  <Feather name="heart" size={18} color="#FFFFFF" />
                   <Text style={styles.actionBtnText}>Offer Help</Text>
                 </>
               )}
@@ -358,9 +388,9 @@ export default function RequestDetailScreen() {
               disabled={loading}
               style={({ pressed }) => [styles.actionBtn, { backgroundColor: colors.success, opacity: pressed || loading ? 0.85 : 1 }]}
             >
-              {loading ? <ActivityIndicator color="#fff" /> : (
+              {loading ? <ActivityIndicator color="#FFFFFF" /> : (
                 <>
-                  <Feather name="check-circle" size={18} color="#fff" />
+                  <Feather name="check-circle" size={18} color="#FFFFFF" />
                   <Text style={styles.actionBtnText}>Mark Complete</Text>
                 </>
               )}
@@ -378,7 +408,40 @@ export default function RequestDetailScreen() {
             </Pressable>
           )}
         </View>
+        {reportMessage && <Text style={styles.reportMessage}>{reportMessage}</Text>}
       </ScrollView>
+
+      <Modal visible={reportVisible} transparent animationType="fade" onRequestClose={() => setReportVisible(false)}>
+        <View style={styles.reportOverlay}>
+          <View style={[styles.reportDialog, { backgroundColor: colors.card }]}>
+            <Text style={[styles.reportDialogTitle, { color: colors.foreground }]}>Report this request</Text>
+            <Text style={[styles.personRole, { color: colors.mutedForeground }]}>Choose the reason that best describes the issue.</Text>
+            {REPORT_REASONS.map((reason) => {
+              const selected = reportReason === reason;
+              return (
+                <Pressable
+                  key={reason}
+                  onPress={() => setReportReason(reason)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                  style={[styles.reportReason, { borderColor: selected ? colors.primary : colors.border, backgroundColor: selected ? colors.secondary : colors.background }]}
+                >
+                  <Text style={[styles.personRole, { color: selected ? colors.primary : colors.foreground }]}>{reason}</Text>
+                  {selected && <Feather name="check-circle" size={17} color={colors.primary} />}
+                </Pressable>
+              );
+            })}
+            <View style={styles.reportDialogActions}>
+              <Pressable onPress={() => setReportVisible(false)} style={[styles.reportDialogButton, { backgroundColor: colors.background }]}>
+                <Text style={[styles.personRole, { color: colors.foreground }]}>Cancel</Text>
+              </Pressable>
+              <Pressable onPress={handleSubmitReport} disabled={reportSubmitting} style={[styles.reportDialogButton, { backgroundColor: colors.primary, opacity: reportSubmitting ? 0.7 : 1 }]}>
+                {reportSubmitting ? <ActivityIndicator color="#FFFFFF" /> : <Text style={[styles.personRole, { color: "#FFFFFF" }]}>Submit Report</Text>}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -412,7 +475,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   emergencyPillText: {
-    color: "#fff",
+    color: "#FFFFFF",
     fontSize: 10,
     fontFamily: "Inter_700Bold",
     letterSpacing: 0.8,
@@ -420,7 +483,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 22,
     fontFamily: "Inter_700Bold",
-    color: "#fff",
+    color: "#FFFFFF",
     lineHeight: 28,
   },
   headerTime: {
@@ -488,6 +551,13 @@ const styles = StyleSheet.create({
     gap: 10,
     marginTop: 8,
   },
+  reportMessage: { marginHorizontal: 20, marginBottom: 18, color: "#0D9488", fontSize: 12, fontFamily: "Inter_500Medium" },
+  reportOverlay: { flex: 1, backgroundColor: "rgba(15,23,42,0.55)", justifyContent: "center", padding: 20 },
+  reportDialog: { width: "100%", maxWidth: 480, alignSelf: "center", borderRadius: 14, padding: 20, gap: 10 },
+  reportDialogTitle: { fontSize: 18, fontFamily: "Inter_700Bold" },
+  reportReason: { minHeight: 44, borderWidth: 1, borderRadius: 8, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  reportDialogActions: { flexDirection: "row", justifyContent: "flex-end", gap: 8, marginTop: 4 },
+  reportDialogButton: { minHeight: 42, paddingHorizontal: 14, borderRadius: 8, alignItems: "center", justifyContent: "center" },
   actionBtn: {
     height: 54,
     borderRadius: 14,
@@ -497,7 +567,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   actionBtnText: {
-    color: "#fff",
+    color: "#FFFFFF",
     fontSize: 16,
     fontFamily: "Inter_600SemiBold",
   },
@@ -533,13 +603,13 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: "#22C55E",
+    backgroundColor: "#10B981",
   },
   navCardTitle: {
     flex: 1,
     fontSize: 14,
     fontFamily: "Inter_600SemiBold",
-    color: "#1E3A8A",
+    color: "#0F2747",
   },
   expandBtn: {
     width: 32,
@@ -567,7 +637,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 13,
     fontFamily: "Inter_500Medium",
-    color: "#1E40AF",
+    color: "#2563EB",
   },
   fullNavBtn: {
     backgroundColor: "#2563EB",
@@ -576,7 +646,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   fullNavBtnText: {
-    color: "#fff",
+    color: "#FFFFFF",
     fontSize: 12,
     fontFamily: "Inter_600SemiBold",
   },

@@ -19,10 +19,11 @@ import { useLocation } from "@/context/LocationContext";
 import { useHelp, HelpRequest } from "@/context/HelpContext";
 import { useDonations } from "@/context/DonationContext";
 import { useEmergencyAlerts } from "@/context/EmergencyAlertContext";
+import { WEST_ACRES_REFERENCE } from "@/constants/communityCenters";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const USER_COLOR = "#3B82F6";
+const USER_COLOR = "#2563EB";
 
 const CATEGORY_EMOJI: Record<string, string> = {
   emergency: "🚨",
@@ -36,7 +37,7 @@ const CATEGORY_EMOJI: Record<string, string> = {
 function requestFill(r: HelpRequest): string {
   if (r.isEmergency) return "#EF4444";
   if (r.status === "accepted") return "#14B8A6";
-  if (r.status === "completed") return "#94A3B8";
+  if (r.status === "completed") return "#64748B";
   return "#F59E0B";
 }
 
@@ -65,7 +66,7 @@ const MAP_HTML = `<!DOCTYPE html>
 <div id="map"></div>
 <div id="nodata" class="nodata">Waiting for live data…</div>
 <script>
-var map = L.map('map',{zoomControl:true,attributionControl:false}).setView([51.505,-0.09],13);
+var map = L.map('map',{zoomControl:true,attributionControl:false}).setView([${WEST_ACRES_REFERENCE.latitude},${WEST_ACRES_REFERENCE.longitude}],13);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
 
  var uMarkers={}, rMarkers={}, dMarkers={}, eMarkers={};
@@ -86,7 +87,7 @@ function renderUsers(users){
     } else {
       var icon=L.divIcon({
         className:'',
-        html:'<div style="width:13px;height:13px;background:'+u.color+';border:2.5px solid #fff;border-radius:50%;box-shadow:0 1px 5px rgba(0,0,0,.35);"></div>',
+        html:'<div style="width:13px;height:13px;background:'+u.color+';border:2.5px solid #FFFFFF;border-radius:50%;box-shadow:0 1px 5px rgba(0,0,0,.35);"></div>',
         iconSize:[13,13],iconAnchor:[6,6]
       });
       uMarkers[u.uid]=L.marker([u.lat,u.lng],{icon:icon}).addTo(map)
@@ -115,7 +116,7 @@ function renderRequests(reqs){
         className:'',
         html:'<div style="position:relative;width:34px;height:34px;display:flex;align-items:center;justify-content:center;">'
           +pulse
-          +'<div style="width:28px;height:28px;background:'+r.color+';border:2.5px solid #fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,.3);">'+r.emoji+'</div>'
+          +'<div style="width:28px;height:28px;background:'+r.color+';border:2.5px solid #FFFFFF;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,.3);">'+r.emoji+'</div>'
           +'</div>',
         iconSize:[34,34],iconAnchor:[17,17]
       });
@@ -141,7 +142,7 @@ function renderDonations(donations){
       var icon=L.divIcon({
         className:'',
         html:'<div style="position:relative;width:34px;height:34px;display:flex;align-items:center;justify-content:center;">'
-          +'<div style="width:28px;height:28px;background:#F59E0B;border:2.5px solid #fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;box-shadow:0 2px 8px rgba(245,158,11,.5);">🎁</div>'
+          +'<div style="width:28px;height:28px;background:#F59E0B;border:2.5px solid #FFFFFF;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;box-shadow:0 2px 8px rgba(245,158,11,.5);">🎁</div>'
           +'</div>',
         iconSize:[34,34],iconAnchor:[17,17]
       });
@@ -149,7 +150,7 @@ function renderDonations(donations){
         .bindPopup(
           '<b>'+d.donorName+'</b><br>'
           +'<span style="color:#64748B;font-size:11px">Donated '+d.quantity+'× '+d.itemType+'</span>'
-          +(d.address?'<br><span style="color:#94A3B8;font-size:10px">'+d.address+'</span>':'')
+          +(d.address?'<br><span style="color:#64748B;font-size:10px">'+d.address+'</span>':'')
         );
     }
     if(!hasView){map.setView([d.lat,d.lng],13);hasView=true;}
@@ -171,17 +172,17 @@ function renderDonations(donations){
        var icon=L.divIcon({
          className:'',
          html:'<div style="position:relative;width:42px;height:42px;display:flex;align-items:center;justify-content:center;">'
-           +'<div style="position:absolute;inset:-6px;border:2px solid #DC2626;border-radius:50%;animation:ring 1.1s ease-out infinite;"></div>'
-           +'<div style="width:32px;height:32px;background:#DC2626;border:3px solid #fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;box-shadow:0 2px 10px rgba(220,38,38,.65);">🚨</div>'
+           +'<div style="position:absolute;inset:-6px;border:2px solid #EF4444;border-radius:50%;animation:ring 1.1s ease-out infinite;"></div>'
+           +'<div style="width:32px;height:32px;background:#EF4444;border:3px solid #FFFFFF;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;box-shadow:0 2px 10px rgba(220,38,38,.65);">🚨</div>'
            +'</div>',
          iconSize:[42,42],iconAnchor:[21,21]
        });
        eMarkers[a.id]=L.marker([a.lat,a.lng],{icon:icon,zIndexOffset:400}).addTo(map)
          .bindPopup(
-           '<b style="color:#DC2626">EMERGENCY ALERT</b><br>'
+           '<b style="color:#EF4444">EMERGENCY ALERT</b><br>'
            +'<b>'+a.userName+'</b><br>'
            +'<span style="color:#64748B;font-size:11px">Calling '+a.serviceName+' · '+a.serviceNumber+'</span>'
-           +(a.address?'<br><span style="color:#94A3B8;font-size:10px">'+a.address+'</span>':'')
+           +(a.address?'<br><span style="color:#64748B;font-size:10px">'+a.address+'</span>':'')
          );
      }
      if(!hasView){map.setView([a.lat,a.lng],14);hasView=true;}
@@ -351,6 +352,6 @@ const styles = StyleSheet.create({
   container: {
     borderRadius: 12,
     overflow: "hidden",
-    backgroundColor: "#E2E8F0",
+    backgroundColor: "#DBEAFE",
   },
 });

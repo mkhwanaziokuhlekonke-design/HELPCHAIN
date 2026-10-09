@@ -67,7 +67,7 @@ export function UserAvatar({ name, size = 40, isAdmin = false, online, photoURL 
               borderRadius: dotSize / 2,
               bottom: 0,
               right: 0,
-              backgroundColor: online ? "#22C55E" : "#94A3B8",
+              backgroundColor: online ? "#10B981" : "#64748B",
               borderWidth: Math.max(1.5, dotSize * 0.2),
             },
           ]}
@@ -88,6 +88,6 @@ const styles = StyleSheet.create({
   },
   dot: {
     position: "absolute",
-    borderColor: "#fff",
+    borderColor: "#FFFFFF",
   },
 });

@@ -10,12 +10,12 @@ interface CategoryBadgeProps {
 }
 
 const CATEGORY_CONFIG: Record<HelpCategory, { label: string; icon: string; bg: string; text: string }> = {
-  emergency: { label: "Emergency", icon: "alert-triangle", bg: "#FEF2F2", text: "#DC2626" },
-  medical: { label: "Medical", icon: "heart", bg: "#FFF0F0", text: "#E11D48" },
-  food: { label: "Food", icon: "shopping-bag", bg: "#F0FDF4", text: "#16A34A" },
-  transport: { label: "Transport", icon: "truck", bg: "#EFF6FF", text: "#1B4FD8" },
-  daily: { label: "Daily Task", icon: "tool", bg: "#FFFBEB", text: "#D97706" },
-  other: { label: "Other", icon: "help-circle", bg: "#F5F3FF", text: "#7C3AED" },
+  emergency: { label: "Emergency", icon: "alert-triangle", bg: "#F8FAFC", text: "#EF4444" },
+  medical: { label: "Medical", icon: "heart", bg: "#F8FAFC", text: "#EF4444" },
+  food: { label: "Food", icon: "shopping-bag", bg: "#ECFDF5", text: "#10B981" },
+  transport: { label: "Transport", icon: "truck", bg: "#EFF6FF", text: "#2563EB" },
+  daily: { label: "Daily Task", icon: "tool", bg: "#F8FAFC", text: "#F59E0B" },
+  other: { label: "Other", icon: "help-circle", bg: "#EFF6FF", text: "#7C3AED" },
 };
 
 export function CategoryBadge({ category, isEmergency = false, size = "md" }: CategoryBadgeProps) {

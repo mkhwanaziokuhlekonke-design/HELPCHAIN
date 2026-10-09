@@ -96,7 +96,7 @@ function buildNavHtml(
     }
     .helper-dot {
       width:20px; height:20px; border-radius:50%;
-      background:#2563EB; border:3px solid #fff;
+      background:#2563EB; border:3px solid #FFFFFF;
       box-shadow:0 2px 8px rgba(37,99,235,0.6);
       position:absolute; top:0; left:0;
     }
@@ -104,7 +104,7 @@ function buildNavHtml(
     .req-pin-wrap { display:flex; flex-direction:column; align-items:center; }
     .req-pin {
       width:22px; height:22px; border-radius:50% 50% 50% 0;
-      background:#DC2626; border:3px solid #fff;
+      background:#EF4444; border:3px solid #FFFFFF;
       box-shadow:0 2px 8px rgba(220,38,38,0.5);
       transform:rotate(-45deg);
     }
@@ -115,12 +115,12 @@ function buildNavHtml(
     /* Info panel inside map */
     #info-panel {
       position:absolute; bottom:12px; left:50%; transform:translateX(-50%);
-      background:rgba(15,23,42,0.88); color:#fff; border-radius:16px;
+      background:rgba(15,23,42,0.88); color:#FFFFFF; border-radius:16px;
       padding:10px 18px; font-family:sans-serif; font-size:13px;
       display:flex; align-items:center; gap:12px; z-index:1000; white-space:nowrap;
       backdrop-filter:blur(6px);
     }
-    .dot-green { width:8px; height:8px; border-radius:50%; background:#22C55E; flex-shrink:0; }
+    .dot-green { width:8px; height:8px; border-radius:50%; background:#10B981; flex-shrink:0; }
     #dist-label { font-weight:700; font-size:15px; }
     #eta-label { opacity:0.75; }
   </style>
@@ -388,7 +388,7 @@ export function NavigationMap({
         <View style={styles.topBar}>
           {onClose && (
             <Pressable onPress={onClose} style={styles.closeBtn} hitSlop={10}>
-              <Feather name="chevron-down" size={22} color="#fff" />
+              <Feather name="chevron-down" size={22} color="#FFFFFF" />
             </Pressable>
           )}
           <View style={styles.topInfo}>
@@ -403,7 +403,7 @@ export function NavigationMap({
               requesterName
             )}
           >
-            <Feather name="navigation" size={14} color="#fff" />
+            <Feather name="navigation" size={14} color="#FFFFFF" />
             <Text style={styles.openMapsText}>Navigate</Text>
           </Pressable>
         </View>
@@ -427,7 +427,7 @@ export function NavigationMap({
       {/* ── Loading overlay while GPS initialises ── */}
       {!myCoords && (
         <View style={styles.gpsOverlay}>
-          <ActivityIndicator color="#fff" />
+          <ActivityIndicator color="#FFFFFF" />
           <Text style={styles.gpsText}>Finding your location…</Text>
         </View>
       )}
@@ -478,10 +478,10 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: "#22C55E",
+    backgroundColor: "#10B981",
   },
   topName: {
-    color: "#fff",
+    color: "#FFFFFF",
     fontSize: 15,
     fontFamily: "Inter_600SemiBold",
     flex: 1,
@@ -496,7 +496,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   openMapsText: {
-    color: "#fff",
+    color: "#FFFFFF",
     fontSize: 13,
     fontFamily: "Inter_600SemiBold",
   },
@@ -517,7 +517,7 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   distValue: {
-    color: "#fff",
+    color: "#FFFFFF",
     fontSize: 26,
     fontFamily: "Inter_700Bold",
   },
@@ -535,14 +535,14 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
   gpsOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(15,23,42,0.6)",
     alignItems: "center",
     justifyContent: "center",
     gap: 10,
   },
   gpsText: {
-    color: "#fff",
+    color: "#FFFFFF",
     fontSize: 13,
     fontFamily: "Inter_400Regular",
   },

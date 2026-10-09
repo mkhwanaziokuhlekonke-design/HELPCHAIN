@@ -3,7 +3,6 @@ import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -16,6 +15,7 @@ import {
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
+import { HelpChainLogo } from "@/components/HelpChainLogo";
 import { useColors } from "@/hooks/useColors";
 
 interface PasswordRule {
@@ -34,9 +34,9 @@ const PASSWORD_RULES: PasswordRule[] = [
 function passwordStrength(p: string): { score: number; label: string; color: string } {
   const passed = PASSWORD_RULES.filter((r) => r.test(p)).length;
   if (passed <= 1) return { score: passed, label: "Very Weak", color: "#EF4444" };
-  if (passed === 2) return { score: passed, label: "Weak", color: "#F97316" };
-  if (passed === 3) return { score: passed, label: "Fair", color: "#EAB308" };
-  if (passed === 4) return { score: passed, label: "Strong", color: "#22C55E" };
+  if (passed === 2) return { score: passed, label: "Weak", color: "#F59E0B" };
+  if (passed === 3) return { score: passed, label: "Fair", color: "#F59E0B" };
+  if (passed === 4) return { score: passed, label: "Strong", color: "#10B981" };
   return { score: passed, label: "Very Strong", color: "#14B8A6" };
 }
 
@@ -53,33 +53,50 @@ export default function SignupScreen() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
   const [showRules, setShowRules] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const bottomPad = Platform.OS === "web" ? 34 : insets.bottom;
   const strength = passwordStrength(password);
 
   async function handleSignup() {
-    if (!name.trim() || !email.trim() || !password.trim()) {
-      Alert.alert("Error", "Please fill in all fields.");
+    setErrorMessage(null);
+    if (!name.trim() || !email.trim() || !password.trim() || !confirmPassword.trim()) {
+      setErrorMessage("Please fill in all fields.");
+      return;
+    }
+    if (password !== confirmPassword) {
+      setErrorMessage("Your passwords do not match. Please check both password fields.");
       return;
     }
     if (!isPasswordStrong(password)) {
-      Alert.alert(
-        "Weak Password",
-        "Your password must have at least 8 characters, one uppercase letter, one lowercase letter, one number, and one special character."
-      );
+      setErrorMessage("Your password must have at least 8 characters, one uppercase letter, one lowercase letter, one number, and one special character.");
       return;
     }
     setLoading(true);
-    const result = await signup(name.trim(), email.trim(), password);
-    setLoading(false);
-    if (result.ok) {
-      router.replace("/(auth)/location" as any);
-    } else {
-      Alert.alert("Sign Up Failed", result.error ?? "Could not create account. Please try again.");
+    try {
+      const result = await signup(name.trim(), email.trim(), password);
+      if (result.ok || result.verificationPending) {
+        router.replace({
+          pathname: "/(auth)/verify-email",
+          params: {
+            email: email.trim(),
+            expiresAt: result.expiresAt ? String(result.expiresAt) : "",
+            resendAt: result.resendAt ? String(result.resendAt) : "",
+            deliveryError: result.error ?? "",
+          },
+        } as any);
+      } else {
+        setErrorMessage(result.error ?? "Could not create account. Please try again.");
+      }
+    } catch {
+      setErrorMessage("Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -89,16 +106,16 @@ export default function SignupScreen() {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <LinearGradient
-        colors={["#1F2937", "#14B8A6"]}
+        colors={["#0F2747", "#2563EB", "#0D9488"]}
         style={[styles.header, { paddingTop: topPad + 20 }]}
       >
         <Pressable onPress={() => router.back()} style={styles.backBtn}>
-          <Feather name="arrow-left" size={22} color="#fff" />
+          <Feather name="arrow-left" size={22} color="#FFFFFF" />
         </Pressable>
         <View style={styles.logoRow}>
-          <Text style={styles.logoText}>HelpChain</Text>
+          <HelpChainLogo width={200} height={122} light />
         </View>
-        <Text style={styles.headerSub}>Join your community today</Text>
+        <Text style={styles.headerSub}>Help together. Grow together.</Text>
       </LinearGradient>
 
       <ScrollView
@@ -106,10 +123,15 @@ export default function SignupScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Create Account</Text>
+        {errorMessage && (
+          <Text accessibilityRole="alert" style={styles.errorMessage}>
+            {errorMessage}
+          </Text>
+        )}
 
         {[
           { label: "Full Name", icon: "user", value: name, setter: setName, placeholder: "Your full name", keyboard: "default" as const },
-          { label: "Email", icon: "mail", value: email, setter: setEmail, placeholder: "you@example.com", keyboard: "email-address" as const },
+          { label: "Email Address", icon: "mail", value: email, setter: setEmail, placeholder: "you@example.com", keyboard: "email-address" as const },
         ].map((field) => (
           <View key={field.label} style={styles.inputGroup}>
             <Text style={[styles.label, { color: colors.mutedForeground }]}>{field.label}</Text>
@@ -122,7 +144,7 @@ export default function SignupScreen() {
                 value={field.value}
                 onChangeText={field.setter}
                 keyboardType={field.keyboard}
-                autoCapitalize={field.label === "Email" ? "none" : "words"}
+                autoCapitalize={field.keyboard === "email-address" ? "none" : "words"}
                 autoCorrect={false}
               />
             </View>
@@ -131,7 +153,7 @@ export default function SignupScreen() {
 
         {/* Password with strength meter */}
         <View style={styles.inputGroup}>
-          <Text style={[styles.label, { color: colors.mutedForeground }]}>Password</Text>
+          <Text style={[styles.label, { color: colors.mutedForeground }]}>Create Password</Text>
           <View style={[styles.inputWrapper, { borderColor: colors.border, backgroundColor: colors.card }]}>
             <Feather name="lock" size={16} color={colors.mutedForeground} />
             <TextInput
@@ -145,6 +167,27 @@ export default function SignupScreen() {
             <Pressable onPress={() => setShowPass(!showPass)}>
               <Feather name={showPass ? "eye-off" : "eye"} size={16} color={colors.mutedForeground} />
             </Pressable>
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={[styles.label, { color: colors.mutedForeground }]}>Confirm Password</Text>
+            <View style={[styles.inputWrapper, { borderColor: colors.border, backgroundColor: colors.card }]}>
+              <Feather name="lock" size={16} color={colors.mutedForeground} />
+              <TextInput
+                style={[styles.input, { color: colors.foreground }]}
+                placeholder="Enter your password again"
+                placeholderTextColor={colors.mutedForeground}
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                secureTextEntry={!showPass}
+                autoCapitalize="none"
+                autoCorrect={false}
+                textContentType="newPassword"
+              />
+              <Pressable onPress={() => setShowPass(!showPass)} accessibilityRole="button" accessibilityLabel={showPass ? "Hide passwords" : "Show passwords"}>
+                <Feather name={showPass ? "eye-off" : "eye"} size={16} color={colors.mutedForeground} />
+              </Pressable>
+            </View>
           </View>
 
           {password.length > 0 && (
@@ -168,9 +211,9 @@ export default function SignupScreen() {
                     <Feather
                       name={passed ? "check-circle" : "circle"}
                       size={13}
-                      color={passed ? "#22C55E" : colors.mutedForeground}
+                      color={passed ? "#10B981" : colors.mutedForeground}
                     />
-                    <Text style={[styles.ruleText, { color: passed ? "#22C55E" : colors.mutedForeground }]}>
+                    <Text style={[styles.ruleText, { color: passed ? "#10B981" : colors.mutedForeground }]}>
                       {rule.label}
                     </Text>
                   </View>
@@ -188,7 +231,7 @@ export default function SignupScreen() {
             { backgroundColor: colors.accent, opacity: pressed || loading ? 0.85 : 1 },
           ]}
         >
-          {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Create Account</Text>}
+          {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.buttonText}>Create Account</Text>}
         </Pressable>
 
         <View style={styles.switchRow}>
@@ -205,8 +248,7 @@ export default function SignupScreen() {
 const styles = StyleSheet.create({
   header: { paddingHorizontal: 24, paddingBottom: 32, gap: 8 },
   backBtn: { marginBottom: 8, alignSelf: "flex-start" },
-  logoRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  logoText: { fontSize: 22, fontFamily: "Inter_700Bold", color: "#fff" },
+  logoRow: { alignItems: "flex-start" },
   headerSub: { fontSize: 14, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.7)" },
   form: { padding: 24, gap: 14 },
   sectionTitle: { fontSize: 24, fontFamily: "Inter_700Bold", marginBottom: 4 },
@@ -229,7 +271,8 @@ const styles = StyleSheet.create({
   ruleRow: { flexDirection: "row", alignItems: "center", gap: 7 },
   ruleText: { fontSize: 12, fontFamily: "Inter_400Regular" },
   button: { height: 52, borderRadius: 14, alignItems: "center", justifyContent: "center", marginTop: 8 },
-  buttonText: { color: "#fff", fontSize: 16, fontFamily: "Inter_600SemiBold" },
+  buttonText: { color: "#FFFFFF", fontSize: 16, fontFamily: "Inter_600SemiBold" },
+  errorMessage: { color: "#EF4444", backgroundColor: "#F8FAFC", borderRadius: 10, padding: 12, fontSize: 13, fontFamily: "Inter_500Medium" },
   switchRow: { flexDirection: "row", justifyContent: "center", alignItems: "center" },
   switchText: { fontSize: 14, fontFamily: "Inter_400Regular" },
   switchLink: { fontSize: 14, fontFamily: "Inter_600SemiBold" },

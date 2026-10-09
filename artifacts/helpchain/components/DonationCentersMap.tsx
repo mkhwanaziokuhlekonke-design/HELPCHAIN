@@ -21,7 +21,7 @@ if (Platform.OS !== "web") {
   WebView = require("react-native-webview").WebView;
 }
 
-type NearbyPlace = DonationDestination & { distanceKm: number };
+ type NearbyPlace = DonationDestination & { latitude?: number; longitude?: number; distanceKm: number };
 type MapPlace = NearbyPlace & { typeLabel: string; distanceLabel: string };
 
 function distanceKm(
@@ -100,7 +100,7 @@ function mapHtml(
 <style>
   html,body,#map{margin:0;width:100%;height:100%;font-family:Arial,sans-serif}
   .me{width:18px;height:18px;border-radius:50%;background:#2563EB;border:3px solid white;box-shadow:0 1px 6px rgba(37,99,235,.7)}
-  .place{width:30px;height:30px;border-radius:15px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px;border:2px solid white;box-shadow:0 2px 8px rgba(15,23,42,.35)}
+  .place{width:30px;height:30px;border-radius:15px;display:flex;align-items:center;justify-content:center;color:#FFFFFF;font-size:15px;border:2px solid white;box-shadow:0 2px 8px rgba(15,23,42,.35)}
   .center{background:#0D9488}.church{background:#7C3AED}.selected{outline:4px solid rgba(20,184,166,.3)}
   .leaflet-popup-content{margin:10px 12px;font-size:12px}.leaflet-popup-content b{font-size:13px}
 </style></head><body><div id="map"></div><script>
@@ -120,7 +120,7 @@ function mapHtml(
   }
   function safeHtml(value) {
     return String(value || '').replace(/[&<>"']/g, function(char) {
-      return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'})[char];
+      return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#2563EB;'})[char];
     });
   }
   places.forEach(function(place){
@@ -455,7 +455,7 @@ export function DonationCentersMap({
               accessibilityLabel="Search area"
               style={[styles.areaSearchButton, { backgroundColor: colors.primary }]}
             >
-              {areaSearching ? <ActivityIndicator size="small" color="#fff" /> : <Feather name="search" size={17} color="#fff" />}
+              {areaSearching ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Feather name="search" size={17} color="#FFFFFF" />}
             </Pressable>
           </View>
         </View>
@@ -500,7 +500,7 @@ export function DonationCentersMap({
                   accessibilityState={{ selected }}
                   testID={`donation-destination-${place.id}`}
                 >
-                  <View style={[styles.placeIcon, { backgroundColor: place.type === "church" ? "#F3E8FF" : colors.tealLight }]}>
+                  <View style={[styles.placeIcon, { backgroundColor: place.type === "church" ? "#EFF6FF" : colors.tealLight }]}>
                     <Feather name={place.type === "church" ? "home" : "users"} size={16} color={place.type === "church" ? "#7C3AED" : colors.teal} />
                   </View>
                   <View style={styles.placeDetails}>
@@ -537,14 +537,14 @@ const styles = StyleSheet.create({
   title: { fontSize: 14, fontFamily: "Inter_700Bold" },
   subtitle: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
   locateButton: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
-  mapFrame: { height: 212, borderRadius: 12, overflow: "hidden", backgroundColor: "#E0F2FE" },
+  mapFrame: { height: 212, borderRadius: 12, overflow: "hidden", backgroundColor: "#EFF6FF" },
   mapUnavailable: { flex: 1, alignItems: "center", justifyContent: "center" },
-  mapLoading: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(255,255,255,0.72)", alignItems: "center", justifyContent: "center", gap: 7 },
+  mapLoading: { ...StyleSheet.absoluteFill, backgroundColor: "rgba(255,255,255,0.72)", alignItems: "center", justifyContent: "center", gap: 7 },
   mapLoadingText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
   locationPrompt: { borderWidth: 1, minHeight: 112, borderRadius: 12, alignItems: "center", justifyContent: "center", gap: 8, paddingHorizontal: 16, paddingVertical: 13 },
   locationPromptText: { fontSize: 12, fontFamily: "Inter_400Regular", textAlign: "center", lineHeight: 17 },
   enableLocation: { borderRadius: 18, paddingHorizontal: 13, paddingVertical: 8 },
-  enableLocationText: { color: "#fff", fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  enableLocationText: { color: "#FFFFFF", fontSize: 12, fontFamily: "Inter_600SemiBold" },
   orDivider: { flexDirection: "row", alignItems: "center", gap: 7, width: "100%", marginTop: 2 },
   dividerLine: { height: 1, flex: 1 },
   orText: { fontSize: 10, fontFamily: "Inter_400Regular" },

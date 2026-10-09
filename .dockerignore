@@ -1,0 +1,13 @@
+.git
+.github
+.vscode
+.env
+**/.env
+**/.env.*
+**/node_modules
+**/dist
+**/*.tsbuildinfo
+**/.expo
+**/.cache
+**/coverage
+*.log

@@ -11,24 +11,72 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
-    // Reads the caller's stored isAdmin flag — if their profile doesn't exist
-    // yet (e.g. mid-signup) the function returns false safely.
-    function callerIsAdmin() {
+    function isVerifiedUser() {
       return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && (
+          !('emailVerified' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data)
+          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.emailVerified == true
+        );
+    }
+
+    function callerIsAdmin() {
+      return isVerifiedUser()
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
     }
 
+    function isAuthorizedReceiver(centreId) {
+      return isVerifiedUser()
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isCentreReceiver == true
+        && centreId in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.authorizedCentreIds;
+    }
+
+    function donationMatchesNotification() {
+      return request.resource.data.donationId is string
+        && exists(/databases/$(database)/documents/donations/$(request.resource.data.donationId))
+        && get(/databases/$(database)/documents/donations/$(request.resource.data.donationId)).data.donorId == request.auth.uid
+        && get(/databases/$(database)/documents/donations/$(request.resource.data.donationId)).data.status == 'registered'
+        && get(/databases/$(database)/documents/donations/$(request.resource.data.donationId)).data.itemType == request.resource.data.itemType
+        && get(/databases/$(database)/documents/donations/$(request.resource.data.donationId)).data.quantity == request.resource.data.quantity
+        && get(/databases/$(database)/documents/donations/$(request.resource.data.donationId)).data.destination.name == request.resource.data.communityCentre
+        && get(/databases/$(database)/documents/donations/$(request.resource.data.donationId)).data.createdAt == request.resource.data.createdAt;
+    }
+
+    function isValidRequestNotification() {
+      return request.resource.data.requestId is string
+        && exists(/databases/$(database)/documents/requests/$(request.resource.data.requestId))
+        && (
+          (request.resource.data.type == 'new_request'
+            && request.resource.data.targetUserId == 'all'
+            && get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.requesterId == request.auth.uid)
+          || (request.resource.data.type == 'emergency_alert'
+            && request.resource.data.targetUserId == 'admins'
+            && get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.requesterId == request.auth.uid
+            && get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.isEmergency == true)
+          || (request.resource.data.type == 'help_offered'
+            && request.resource.data.targetUserId == request.auth.uid
+            && get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.helperId == request.auth.uid)
+          || (request.resource.data.type == 'completed'
+            && request.resource.data.targetUserId == request.auth.uid
+            && get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.status == 'completed'
+            && (get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.requesterId == request.auth.uid
+              || get(/databases/$(database)/documents/requests/$(request.resource.data.requestId)).data.helperId == request.auth.uid))
+        );
+    }
+
     // ── Users ──────────────────────────────────────────────────────────
     match /users/{userId} {
-      // Any signed-in user may read the user directory
-      allow read: if isSignedIn();
+      // Personal account data is visible only to its owner and administrators.
+      allow read: if callerIsAdmin() || isOwner(userId);
 
       // A user may create their own profile document on sign-up,
       // but may NOT grant themselves admin rights at creation time.
       allow create: if isOwner(userId)
         && (!('isAdmin' in request.resource.data)
-            || request.resource.data.isAdmin == false);
+            || request.resource.data.isAdmin == false)
+        && (!('emailVerified' in request.resource.data)
+            || request.resource.data.emailVerified == false);
 
       // A user may update their own profile (photo, stats, etc.)
       // but cannot change their own isAdmin flag.
@@ -36,26 +84,49 @@ service cloud.firestore {
         && (
           !('isAdmin' in request.resource.data)
           || request.resource.data.isAdmin == resource.data.isAdmin
-        );
+        )
+        && request.resource.data.get('emailVerified', false)
+          == resource.data.get('emailVerified', false);
 
       // Admins may update or delete any user profile (promote/demote/suspend).
-      allow update, delete: if callerIsAdmin();
+      allow update: if callerIsAdmin()
+        && request.resource.data.get('emailVerified', false)
+          == resource.data.get('emailVerified', false);
+      allow delete: if callerIsAdmin();
     }
 
     // ── Help Requests ──────────────────────────────────────────────────
     match /requests/{requestId} {
-      allow read:   if isSignedIn();
-      allow create: if isSignedIn();
-      // Any signed-in user may update (offer help, complete, etc.)
-      allow update: if isSignedIn();
+      // Emergency request details (including location) are private to the
+      // requester, assigned helper, and administrators.
+      allow read: if isVerifiedUser() && (
+        callerIsAdmin()
+        || resource.data.get('isEmergency', false) == false
+        || resource.data.requesterId == request.auth.uid
+        || resource.data.helperId == request.auth.uid
+      );
+      allow create: if isVerifiedUser()
+        && request.resource.data.requesterId == request.auth.uid;
+      // Emergency requests can only be managed by the requester, assigned
+      // helper, or an administrator.
+      allow update: if isVerifiedUser() && (
+        callerIsAdmin()
+        || (
+          (resource.data.get('isEmergency', false) == false
+            || resource.data.requesterId == request.auth.uid
+            || resource.data.helperId == request.auth.uid)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'status', 'helperId', 'helperName', 'updatedAt', '_serverTs'
+          ])
+        )
+      );
       // Only admins may hard-delete requests
       allow delete: if callerIsAdmin();
     }
 
     // ── Community Chat ─────────────────────────────────────────────────
     match /chat/{messageId} {
-      allow read:   if isSignedIn();
-      allow create: if isSignedIn();
+      allow read, create: if callerIsAdmin();
       // Only admins may delete messages (moderation)
       allow delete: if callerIsAdmin();
     }
@@ -63,19 +134,150 @@ service cloud.firestore {
     // ── Notifications ──────────────────────────────────────────────────
     match /notifications/{notifId} {
       // Users may only read their own notifications or broadcast ones
-      allow read: if isSignedIn() && (
+      allow read: if isVerifiedUser() && (
         resource.data.targetUserId == request.auth.uid
         || resource.data.targetUserId == 'all'
+        || (resource.data.targetUserId == 'admins' && callerIsAdmin())
+      );
+      allow create: if callerIsAdmin()
+        || (isVerifiedUser()
+          && request.resource.data.createdByUid == request.auth.uid
+          && request.resource.data.read == false
+          && donationMatchesNotification()
+          && ((request.resource.data.type == 'donation_registered'
+              && request.resource.data.targetUserId == request.auth.uid)
+            || (request.resource.data.type == 'new_donation'
+              && request.resource.data.targetUserId == 'admins')))
+        || (isVerifiedUser()
+          && request.resource.data.createdByUid == request.auth.uid
+          && request.resource.data.read == false
+          && isValidRequestNotification());
+      allow update: if isVerifiedUser()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read'])
+        && request.resource.data.read is bool
+        && (resource.data.targetUserId == request.auth.uid
+            || resource.data.targetUserId == 'all'
+            || (resource.data.targetUserId == 'admins' && callerIsAdmin()));
+      allow delete: if isVerifiedUser() && (
+        resource.data.targetUserId == request.auth.uid
         || callerIsAdmin()
       );
-      allow write: if isSignedIn();
     }
 
     // ── Donations ──────────────────────────────────────────────────────
     match /donations/{donId} {
-      allow read:   if isSignedIn();
-      allow create: if isSignedIn();
-      allow update: if isSignedIn();
+      allow read: if isVerifiedUser() && (
+        callerIsAdmin()
+        || resource.data.donorId == request.auth.uid
+        || resource.data.get('campaignCreatorId', '') == request.auth.uid
+      );
+      // Donation records and immutable audit events are written only by the
+      // authenticated workflow API using Firebase Admin transactions.
+      allow create, update, delete: if false;
+
+      match /auditTrail/{auditId} {
+        allow read: if callerIsAdmin()
+          || (isVerifiedUser() && get(/databases/$(database)/documents/donations/$(donId)).data.donorId == request.auth.uid)
+          || isAuthorizedReceiver(get(/databases/$(database)/documents/donations/$(donId)).data.destination.id);
+        allow create, update, delete: if false;
+      }
+    }
+
+    match /donationInventory/{itemId} {
+      allow read: if isVerifiedUser();
+      allow create, update, delete: if false;
+    }
+
+    match /donationRequests/{requestId} {
+      allow read: if isVerifiedUser() && (
+        resource.data.userId == request.auth.uid
+        || callerIsAdmin()
+        || isAuthorizedReceiver(resource.data.centreId)
+      );
+      allow create, update, delete: if false;
+
+      match /auditTrail/{auditId} {
+        allow read: if callerIsAdmin()
+          || (isVerifiedUser() && get(/databases/$(database)/documents/donationRequests/$(requestId)).data.userId == request.auth.uid)
+          || isAuthorizedReceiver(get(/databases/$(database)/documents/donationRequests/$(requestId)).data.centreId);
+        allow create, update, delete: if false;
+      }
+    }
+
+    match /counters/{counterId} {
+      allow read, write: if false;
+    }
+
+    match /users/{userId}/roleAudit/{auditId} {
+      allow read: if callerIsAdmin() || isOwner(userId);
+      allow create, update, delete: if false;
+    }
+
+    // ── Campaigns ───────────────────────────────────────────────────────
+    match /campaigns/{campaignId} {
+      allow read: if isVerifiedUser();
+      allow create: if isVerifiedUser()
+        && request.resource.data.creatorId == request.auth.uid
+        && request.resource.data.name is string
+        && request.resource.data.raisedAmount is int
+        && request.resource.data.raisedAmount >= 0
+        && request.resource.data.donorCount is int
+        && request.resource.data.donorCount >= 0
+        && request.resource.data.createdAt is string;
+      allow update: if isVerifiedUser()
+        && resource.data.creatorId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['raisedAmount', 'donorCount', 'updatedAt'])
+        && request.resource.data.raisedAmount is int
+        && request.resource.data.raisedAmount >= 0
+        && request.resource.data.donorCount is int
+        && request.resource.data.donorCount >= 0;
+      allow delete: if callerIsAdmin();
+    }
+
+    // ── Official Donation Information ──────────────────────────────────
+    match /donationInformation/{guideId} {
+      allow read: if isVerifiedUser();
+      allow create, update, delete: if callerIsAdmin();
+    }
+
+    // ── App Announcements ───────────────────────────────────────────────
+    match /announcements/{announcementId} {
+      allow read: if isVerifiedUser();
+      allow create: if callerIsAdmin()
+        && request.resource.data.createdById == request.auth.uid
+        && request.resource.data.createdByName is string
+        && request.resource.data.title is string
+        && request.resource.data.body is string;
+      allow update, delete: if callerIsAdmin();
+    }
+
+    // ── Verified Organisations ────────────────────────────────────────
+    match /organisations/{orgId} {
+      allow read: if isVerifiedUser();
+      allow create, update, delete: if callerIsAdmin();
+    }
+
+    // ── Community Centres ───────────────────────────────────────────────
+    match /communityCentres/{centreId} {
+      allow read: if isVerifiedUser();
+      allow create, update, delete: if callerIsAdmin();
+    }
+
+    // ── Help Request Reports ────────────────────────────────────────────
+    match /reports/{reportId} {
+      allow create: if isVerifiedUser()
+        && request.resource.data.reporterId == request.auth.uid
+        && request.resource.data.requestId is string
+        && request.resource.data.requestTitle is string
+        && request.resource.data.reason in [
+          'Misleading information', 'Duplicate request',
+          'Inappropriate content', 'Safety concern'
+        ]
+        && request.resource.data.status == 'pending';
+      allow read: if callerIsAdmin();
+      allow update: if callerIsAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt', '_serverTs'])
+        && request.resource.data.status in ['pending', 'resolved'];
       allow delete: if callerIsAdmin();
     }
 
@@ -83,19 +285,24 @@ service cloud.firestore {
     match /emergencyAlerts/{alertId} {
       // A user may create an alert only under their own identity. Admins can
       // monitor every alert and its location; users can only read their own.
-      allow create: if isSignedIn()
+      allow create: if isVerifiedUser()
         && request.resource.data.userId == request.auth.uid;
       allow read: if callerIsAdmin() || (
-        isSignedIn() && resource.data.userId == request.auth.uid
+        isVerifiedUser() && resource.data.userId == request.auth.uid
       );
       allow update, delete: if callerIsAdmin();
     }
 
     // ── Presence (live location + online status) ───────────────────────
     match /presence/{userId} {
-      allow read:  if isSignedIn();
+      allow read:  if isVerifiedUser();
       // Users write their own presence; admins can clear stale records
-      allow write: if isOwner(userId) || callerIsAdmin();
+      allow write: if (isOwner(userId) && isVerifiedUser()) || callerIsAdmin();
+    }
+
+    // OTP challenges are private to the trusted verification API.
+    match /emailOtpChallenges/{userId} {
+      allow read, write: if false;
     }
   }
 }

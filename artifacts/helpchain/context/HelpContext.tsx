@@ -2,15 +2,18 @@ import {
   addDoc,
   collection,
   doc,
+  getDoc,
   onSnapshot,
   orderBy,
   query,
   serverTimestamp,
   updateDoc,
+  where,
 } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { auth, db } from "@/lib/firebase";
+import { isOfflineFirestoreError } from "@/context/AuthContext";
 
 export type HelpCategory = "emergency" | "medical" | "food" | "transport" | "daily" | "other";
 export type HelpStatus = "open" | "accepted" | "completed" | "cancelled";
@@ -57,38 +60,98 @@ export function HelpProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Gate on auth — prevents permission-denied on first load before login
+    let snapshotUnsubscribers: (() => void)[] = [];
+    let generation = 0;
+    const clearSnapshots = () => {
+      snapshotUnsubscribers.forEach((unsubscribe) => unsubscribe());
+      snapshotUnsubscribers = [];
+    };
+
     const unsubAuth = onAuthStateChanged(auth, (fbUser) => {
+      const currentGeneration = ++generation;
+      clearSnapshots();
       if (!fbUser) {
         setRequests([]);
         setLoading(false);
         return;
       }
       setLoading(true);
-      const q = query(collection(db, "requests"), orderBy("createdAt", "desc"));
-      const unsubSnap = onSnapshot(
-        q,
-        (snap) => {
-          const reqs: HelpRequest[] = snap.docs.map((d) => ({
-            id: d.id,
-            ...(d.data() as Omit<HelpRequest, "id">),
-          }));
-          setRequests(reqs);
+      void (async () => {
+        let isAdmin = false;
+        try {
+          const profile = await getDoc(doc(db, "users", fbUser.uid));
+          isAdmin = profile.exists() && profile.data().isAdmin === true;
+        } catch (error) {
+          if (currentGeneration !== generation) return;
+          console.warn("[HelpContext] could not load access profile:", error);
           setLoading(false);
-        },
-        (err) => {
-          console.warn("[HelpContext] snapshot error:", err.code);
-          setLoading(false);
+          return;
         }
-      );
-      return unsubSnap;
+        if (currentGeneration !== generation) return;
+
+        const requestsRef = collection(db, "requests");
+        const queries = isAdmin
+          ? [query(requestsRef, orderBy("createdAt", "desc"))]
+          : [
+              query(requestsRef, where("isEmergency", "==", false)),
+              query(requestsRef, where("requesterId", "==", fbUser.uid)),
+              query(requestsRef, where("helperId", "==", fbUser.uid)),
+            ];
+        const results = new Map<number, HelpRequest[]>();
+        const receivedInitialSnapshots = new Set<number>();
+        const publish = () => {
+          const deduplicated = new Map<string, HelpRequest>();
+          results.forEach((items) => items.forEach((item) => deduplicated.set(item.id, item)));
+          setRequests(
+            [...deduplicated.values()].sort(
+              (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            )
+          );
+          if (receivedInitialSnapshots.size === queries.length) setLoading(false);
+        };
+
+        queries.forEach((requestQuery, index) => {
+          snapshotUnsubscribers.push(
+            onSnapshot(
+              requestQuery,
+              (snap) => {
+                if (currentGeneration !== generation) return;
+                results.set(index, snap.docs.map((d) => ({
+                  id: d.id,
+                  ...(d.data() as Omit<HelpRequest, "id">),
+                })));
+                receivedInitialSnapshots.add(index);
+                publish();
+              },
+              (error) => {
+                if (currentGeneration !== generation) return;
+                console.warn("[HelpContext] snapshot error:", error.code);
+                receivedInitialSnapshots.add(index);
+                publish();
+              }
+            )
+          );
+        });
+      })();
     });
-    return () => unsubAuth();
+    return () => {
+      generation++;
+      clearSnapshots();
+      unsubAuth();
+    };
   }, []);
 
   async function addRequest(
     req: Omit<HelpRequest, "id" | "status" | "createdAt" | "updatedAt">
   ): Promise<HelpRequest> {
+    if (!auth?.currentUser) {
+      throw new Error("You must be signed in to create a request.");
+    }
+
+    if (auth.currentUser.uid !== req.requesterId) {
+      throw new Error("Please sign in with the account you want to post from.");
+    }
+
     const now = new Date().toISOString();
     const data = {
       ...req,
@@ -104,7 +167,7 @@ export function HelpProvider({ children }: { children: React.ReactNode }) {
         title: req.isEmergency ? "🚨 Emergency Request" : "🆕 New Help Request",
         body: `${req.requesterName} needs help: ${req.title}`,
         type: req.isEmergency ? "emergency_alert" : "new_request",
-        targetUserId: "all",
+        targetUserId: req.isEmergency ? "admins" : "all",
         createdByUid: req.requesterId,
         read: false,
         requestId: ref.id,
@@ -114,6 +177,14 @@ export function HelpProvider({ children }: { children: React.ReactNode }) {
       return { id: ref.id, ...data };
     } catch (e: any) {
       console.error("[HelpContext] addRequest failed:", e?.code, e?.message);
+
+      if (e?.code === "permission-denied") {
+        throw new Error("Permission denied. Please publish the Firestore rules and ensure you are signed in.");
+      }
+      if (isOfflineFirestoreError(e) || /offline|network/i.test(e?.message ?? "")) {
+        throw new Error("Could not post your request because the device is offline. Please check your connection and try again.");
+      }
+
       throw new Error(e?.message ?? "Failed to post request");
     }
   }

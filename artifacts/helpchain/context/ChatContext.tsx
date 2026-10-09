@@ -6,9 +6,9 @@ import {
   query,
   serverTimestamp,
 } from "firebase/firestore";
-import { onAuthStateChanged } from "firebase/auth";
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { auth, db } from "@/lib/firebase";
+import { useAuth } from "@/context/AuthContext";
+import { db } from "@/lib/firebase";
 
 export interface ChatMessage {
   id: string;
@@ -28,49 +28,40 @@ interface ChatContextType {
 const ChatContext = createContext<ChatContextType | null>(null);
 
 export function ChatProvider({ children }: { children: React.ReactNode }) {
+  const { user, loading: authLoading } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Wait for an authenticated user before opening the listener.
-    // This prevents a permission-denied error on mount (before login)
-    // that would kill the listener and never restart it.
-    const unsubAuth = onAuthStateChanged(auth, (fbUser) => {
-      if (!fbUser) {
-        // Not signed in — clear state but don't open a doomed listener
-        setMessages([]);
+    if (authLoading) return;
+    if (!user?.isAdmin) {
+      setMessages([]);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    const q = query(collection(db, "chat"), orderBy("createdAt", "asc"));
+    return onSnapshot(
+      q,
+      (snap) => {
+        const msgs: ChatMessage[] = snap.docs.map((d) => ({
+          id: d.id,
+          ...(d.data() as Omit<ChatMessage, "id">),
+        }));
+        setMessages(msgs);
+        setError(null);
         setLoading(false);
-        return;
+      },
+      (err) => {
+        console.error("[ChatContext] snapshot error:", err.code, err.message);
+        setError(err.code === "permission-denied" ? "permission-denied" : "unavailable");
+        setLoading(false);
       }
-
-      // Signed in — open (or re-open) the real-time listener
-      setLoading(true);
-      const q = query(collection(db, "chat"), orderBy("createdAt", "asc"));
-      const unsubSnap = onSnapshot(
-        q,
-        (snap) => {
-          const msgs: ChatMessage[] = snap.docs.map((d) => ({
-            id: d.id,
-            ...(d.data() as Omit<ChatMessage, "id">),
-          }));
-          setMessages(msgs);
-          setError(null);
-          setLoading(false);
-        },
-        (err) => {
-          console.error("[ChatContext] snapshot error:", err.code, err.message);
-          setError(err.code === "permission-denied" ? "permission-denied" : "unavailable");
-          setLoading(false);
-        }
-      );
-
-      // When auth state changes (e.g. sign-out), tear down the snapshot listener
-      return unsubSnap;
-    });
-
-    return () => unsubAuth();
-  }, []);
+    );
+  }, [authLoading, user?.id, user?.isAdmin]);
 
   async function sendMessage(userId: string, userName: string, text: string) {
     try {

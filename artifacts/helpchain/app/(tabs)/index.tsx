@@ -1,81 +1,33 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React from "react";
 import {
-  Alert,
   ActivityIndicator,
-  Image,
-  Linking,
-  Modal,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
   useWindowDimensions,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import Svg, { Circle, Path, Line as SvgLine, Text as SvgText, G } from "react-native-svg";
 import * as Haptics from "expo-haptics";
-import * as Location from "expo-location";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { UserAvatar } from "@/components/UserAvatar";
+import { HelpChainLogo } from "@/components/HelpChainLogo";
+import { AdminActivityMap } from "@/components/AdminActivityMap";
+import { AdminUserActivityFeed } from "@/components/AdminUserActivityFeed";
 import { useAuth } from "@/context/AuthContext";
+import { useAnnouncements } from "@/context/AnnouncementContext";
 import { useHelp } from "@/context/HelpContext";
 import { useChat } from "@/context/ChatContext";
-import { DonationDestination, useDonations } from "@/context/DonationContext";
-import { useEmergencyAlerts } from "@/context/EmergencyAlertContext";
-import { useLocation } from "@/context/LocationContext";
+import { useDonations } from "@/context/DonationContext";
 import { usePresence } from "@/context/PresenceContext";
+import { useCommunityCentres } from "@/context/CommunityCentreContext";
+import { useReports } from "@/context/ReportContext";
 import { useColors } from "@/hooks/useColors";
-import { DonationCentersMap } from "@/components/DonationCentersMap";
-
-const logo = require("@/assets/images/logo.jpeg");
-
-const SOUTH_AFRICA_EMERGENCY_SERVICES = [
-  {
-    key: "police",
-    emoji: "👮",
-    name: "South African Police",
-    number: "10111",
-    description: "Crime, danger, or immediate police assistance",
-    color: "#2563EB",
-  },
-  {
-    key: "ambulance-fire",
-    emoji: "🚑",
-    name: "Ambulance & Fire",
-    number: "10177",
-    description: "Medical emergency, ambulance, or fire rescue",
-    color: "#DC2626",
-  },
-  {
-    key: "mobile-emergency",
-    emoji: "📱",
-    name: "Mobile Emergency",
-    number: "112",
-    description: "Emergency services from a mobile phone",
-    color: "#7C3AED",
-  },
-  {
-    key: "er24",
-    emoji: "❤️",
-    name: "ER24",
-    number: "084 124",
-    description: "Private ambulance and medical response",
-    color: "#0F766E",
-  },
-  {
-    key: "netcare-911",
-    emoji: "🏥",
-    name: "Netcare 911",
-    number: "082 911",
-    description: "Private emergency medical response",
-    color: "#EA580C",
-  },
-] as const;
 
 /* ─── shared helpers ─── */
 function timeAgo(iso: string): string {
@@ -91,7 +43,7 @@ function statusColor(status: string) {
   if (status === "open") return "#10B981";
   if (status === "accepted") return "#F59E0B";
   if (status === "completed") return "#14B8A6";
-  return "#9CA3AF";
+  return "#64748B";
 }
 function statusLabel(status: string) {
   if (status === "open") return "New";
@@ -129,31 +81,31 @@ function MiniChart({ width }: { width: number }) {
           const y = H - (val / maxY) * (H - 16) + 2;
           return (
             <G key={val}>
-              <SvgLine x1={0} y1={y} x2={W} y2={y} stroke="#E2E8F0" strokeWidth={1} />
-              <SvgText x={-2} y={y + 4} fontSize={8} fill="#94A3B8" textAnchor="end">
+              <SvgLine x1={0} y1={y} x2={W} y2={y} stroke="#DBEAFE" strokeWidth={1} />
+              <SvgText x={-2} y={y + 4} fontSize={8} fill="#64748B" textAnchor="end">
                 {val === 0 ? "0" : val >= 1000 ? `${val / 1000}k` : val}
               </SvgText>
             </G>
           );
         })}
-        <Path d={buildPath(CHART_POINTS.requests, W, H, maxY)} fill="none" stroke="#3B82F6" strokeWidth={2} />
+        <Path d={buildPath(CHART_POINTS.requests, W, H, maxY)} fill="none" stroke="#2563EB" strokeWidth={2} />
         <Path d={buildPath(CHART_POINTS.donations, W, H, maxY)} fill="none" stroke="#14B8A6" strokeWidth={2} />
-        <Path d={buildPath(CHART_POINTS.users, W, H, maxY)} fill="none" stroke="#A78BFA" strokeWidth={2} />
+        <Path d={buildPath(CHART_POINTS.users, W, H, maxY)} fill="none" stroke="#7C3AED" strokeWidth={2} />
         {CHART_POINTS.requests.map((v, i) => (
-          <Circle key={`r${i}`} cx={(i / 6) * W} cy={H - (v / maxY) * (H - 16)} r={3} fill="#3B82F6" />
+          <Circle key={`r${i}`} cx={(i / 6) * W} cy={H - (v / maxY) * (H - 16)} r={3} fill="#2563EB" />
         ))}
         {CHART_POINTS.donations.map((v, i) => (
           <Circle key={`d${i}`} cx={(i / 6) * W} cy={H - (v / maxY) * (H - 16)} r={3} fill="#14B8A6" />
         ))}
         {CHART_POINTS.users.map((v, i) => (
-          <Circle key={`u${i}`} cx={(i / 6) * W} cy={H - (v / maxY) * (H - 16)} r={3} fill="#A78BFA" />
+          <Circle key={`u${i}`} cx={(i / 6) * W} cy={H - (v / maxY) * (H - 16)} r={3} fill="#7C3AED" />
         ))}
         {["1", "11", "21", "31"].map((lbl, i) => (
-          <SvgText key={lbl} x={(i / 3) * W} y={H + 16} fontSize={8} fill="#94A3B8" textAnchor="middle">{lbl}</SvgText>
+          <SvgText key={lbl} x={(i / 3) * W} y={H + 16} fontSize={8} fill="#64748B" textAnchor="middle">{lbl}</SvgText>
         ))}
       </Svg>
       <View style={{ flexDirection: "row", gap: 14, paddingLeft: 4, marginTop: 4 }}>
-        {[{ c: "#3B82F6", l: "Requests" }, { c: "#14B8A6", l: "Donations" }, { c: "#A78BFA", l: "Users" }].map((s) => (
+        {[{ c: "#2563EB", l: "Requests" }, { c: "#14B8A6", l: "Donations" }, { c: "#7C3AED", l: "Users" }].map((s) => (
           <View key={s.l} style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
             <View style={{ width: 18, height: 3, backgroundColor: s.c, borderRadius: 2 }} />
             <Text style={{ fontSize: 10, color: "#64748B", fontFamily: "Inter_400Regular" }}>{s.l}</Text>
@@ -164,40 +116,45 @@ function MiniChart({ width }: { width: number }) {
   );
 }
 
-const PENDING_REPORTS = [
-  { id: "rep1", title: "Inappropriate Content", desc: "Reported in General Chat", time: "10 min ago", color: "#EF4444" },
-  { id: "rep2", title: "Spam User", desc: "User: john_doe123", time: "25 min ago", color: "#EF4444" },
-  { id: "rep3", title: "Harassment", desc: "Reported in Food Support", time: "45 min ago", color: "#F59E0B" },
-  { id: "rep4", title: "Fake Request", desc: "Request ID: REQ12345", time: "1 hr ago", color: "#F59E0B" },
-];
-
-const SYSTEM_SUMMARY = [
-  { label: "Total Categories", val: "24" },
-  { label: "Verified Volunteers", val: "1,256" },
-  { label: "Messages (This Month)", val: "8,745" },
-  { label: "App Version", val: "1.2.3" },
-  { label: "Total Downloads", val: "25,680" },
-];
-
 /* ─── admin dashboard (inline) ─── */
 function AdminDashboard() {
-  const { allUsers } = useAuth();
-  const { requests } = useHelp();
-  const { donations, totalItems } = useDonations();
-  const { messages } = useChat();
+  const { allUsers, allUsersLoading, allUsersError } = useAuth();
+  const { requests, loading: requestsLoading } = useHelp();
+  const { donations, totalItems, loading: donationsLoading } = useDonations();
+  const { announcements } = useAnnouncements();
+  const { centres, loading: centresLoading } = useCommunityCentres();
+  const { reports, loading: reportsLoading, resolveReport } = useReports();
   const router = useRouter();
   const { width } = useWindowDimensions();
 
-  const openReqs = requests.filter((r) => r.status === "open").length;
+  const activeReqs = requests.filter((r) => r.status === "open" || r.status === "accepted").length;
   const completedReqs = requests.filter((r) => r.status === "completed").length;
+  const pendingReports = reports.filter((report) => report.status === "pending");
+  const systemSummary = [
+    { label: "Registered Users", val: String(allUsers.length) },
+    { label: "Authorised Admins", val: String(allUsers.filter((u) => u.isAdmin).length) },
+    { label: "Active Requests", val: requestsLoading ? "..." : String(activeReqs) },
+    { label: "Items Donated", val: donationsLoading ? "..." : String(totalItems) },
+    { label: "Donation Contributions", val: String(donations.length) },
+    { label: "Active Centres", val: centresLoading ? "..." : String(centres.length) },
+    { label: "Official Updates", val: String(announcements.length) },
+  ];
+
+  async function handleResolveReport(reportId: string) {
+    try {
+      await resolveReport(reportId);
+    } catch (error) {
+      console.warn("[AdminDashboard] report resolution failed:", error);
+    }
+  }
 
   const STATS = [
-    { label: "Total Users", val: String(allUsers.length), icon: "user", bg: "#3B82F6", trend: "+12.5%" },
-    { label: "Active Requests", val: String(openReqs), icon: "activity", bg: "#10B981", trend: "+8.3%" },
-    { label: "Completed", val: String(completedReqs), icon: "check-circle", bg: "#8B5CF6", trend: "+15.7%" },
-    { label: "Donations Made", val: String(donations.length), icon: "gift", bg: "#F59E0B", trend: "+10.2%" },
-    { label: "Community Groups", val: "86", icon: "users", bg: "#EC4899", trend: "+6.4%" },
-    { label: "Pending Reports", val: String(PENDING_REPORTS.length), icon: "alert-circle", bg: "#EF4444", trend: "↓3.2%" },
+    { label: "Total Users", val: allUsersLoading ? "..." : allUsersError ? "N/A" : String(allUsers.length), icon: "user", bg: "#2563EB" },
+    { label: "Active Requests", val: requestsLoading ? "..." : String(activeReqs), icon: "activity", bg: "#10B981" },
+    { label: "Completed", val: requestsLoading ? "..." : String(completedReqs), icon: "check-circle", bg: "#7C3AED" },
+    { label: "Items Donated", val: donationsLoading ? "..." : String(totalItems), icon: "gift", bg: "#F59E0B" },
+    { label: "Active Centres", val: centresLoading ? "..." : String(centres.length), icon: "map-pin", bg: "#7C3AED" },
+    { label: "Pending Reports", val: reportsLoading ? "..." : String(pendingReports.length), icon: "alert-circle", bg: "#EF4444" },
   ];
 
   return (
@@ -207,14 +164,11 @@ function AdminDashboard() {
         {STATS.map((s) => (
           <View key={s.label} style={adm.statCard}>
             <View style={[adm.statCircle, { backgroundColor: s.bg }]}>
-              <Feather name={s.icon as any} size={18} color="#fff" />
+              <Feather name={s.icon as any} size={18} color="#FFFFFF" />
             </View>
             <Text style={adm.statVal}>{s.val}</Text>
             <Text style={adm.statLabel}>{s.label}</Text>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 3, marginTop: 2 }}>
-              <Feather name="trending-up" size={9} color="#10B981" />
-              <Text style={{ fontSize: 9, color: "#10B981", fontFamily: "Inter_400Regular" }}>{s.trend} from last month</Text>
-            </View>
+            <Text style={{ fontSize: 9, color: "#64748B", fontFamily: "Inter_400Regular", marginTop: 2 }}>Current total</Text>
           </View>
         ))}
       </ScrollView>
@@ -222,7 +176,7 @@ function AdminDashboard() {
       {/* Overview chart */}
       <View style={adm.card}>
         <View style={adm.cardHead}>
-          <Text style={adm.cardTitle}>Overview <Text style={{ color: "#94A3B8", fontFamily: "Inter_400Regular", fontSize: 12 }}>(This Month)</Text></Text>
+          <Text style={adm.cardTitle}>Overview <Text style={{ color: "#64748B", fontFamily: "Inter_400Regular", fontSize: 12 }}>(This Month)</Text></Text>
           <View style={adm.pill}><Text style={adm.pillText}>This Month</Text><Feather name="chevron-down" size={11} color="#64748B" /></View>
         </View>
         <MiniChart width={width - 32} />
@@ -234,23 +188,12 @@ function AdminDashboard() {
           <Text style={adm.cardTitle}>Live Activity Map</Text>
           <View style={adm.pill}><Text style={adm.pillText}>All Activities</Text><Feather name="chevron-down" size={11} color="#64748B" /></View>
         </View>
-        {Platform.OS === "web" ? (
-          <iframe
-            src="https://www.openstreetmap.org/export/embed.html?bbox=-74.05,40.69,-73.97,40.73&layer=mapnik"
-            style={{ width: "100%", height: 170, border: "none", borderRadius: 8 } as any}
-            title="Live Activity Map"
-          />
-        ) : (
-          <View style={{ height: 170, backgroundColor: "#DBEAFE", borderRadius: 8, alignItems: "center", justifyContent: "center", gap: 6 }}>
-            <Feather name="map" size={32} color="#3B82F6" />
-            <Text style={{ color: "#1D4ED8", fontSize: 13, fontFamily: "Inter_600SemiBold" }}>Live Activity Map</Text>
-          </View>
-        )}
+        <AdminActivityMap height={170} />
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 10 }}>
           {[
-            { color: "#3B82F6", label: "Active Requests" },
+            { color: "#2563EB", label: "Active Requests" },
             { color: "#10B981", label: "Donations" },
-            { color: "#8B5CF6", label: "Volunteers" },
+            { color: "#7C3AED", label: "Volunteers" },
             { color: "#F59E0B", label: "Community Groups" },
           ].map((l) => (
             <View key={l.label} style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
@@ -259,33 +202,6 @@ function AdminDashboard() {
             </View>
           ))}
         </View>
-      </View>
-
-      {/* Recent Requests */}
-      <View style={adm.card}>
-        <View style={adm.cardHead}>
-          <Text style={adm.cardTitle}>Recent Requests</Text>
-          <Pressable onPress={() => router.push("/admin" as any)}>
-            <Text style={adm.viewAll}>View All</Text>
-          </Pressable>
-        </View>
-        {requests.slice(0, 4).map((req) => (
-          <View key={req.id} style={adm.row}>
-            <View style={[adm.avatar, { backgroundColor: req.isEmergency ? "#FEE2E2" : "#DBEAFE" }]}>
-              <Text style={[adm.avatarText, { color: req.isEmergency ? "#EF4444" : "#2563EB" }]}>{req.requesterName.charAt(0)}</Text>
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={adm.rowTitle} numberOfLines={1}>{req.title}</Text>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 3, marginTop: 2 }}>
-                <Feather name="map-pin" size={9} color="#94A3B8" />
-                <Text style={adm.rowSub}>{req.location?.address ?? "Your City"}</Text>
-              </View>
-            </View>
-            <View style={[adm.badge, { backgroundColor: statusColor(req.status) + "20" }]}>
-              <Text style={[adm.badgeText, { color: statusColor(req.status) }]}>{statusLabel(req.status)}</Text>
-            </View>
-          </View>
-        ))}
       </View>
 
       {/* Recent Donations */}
@@ -298,7 +214,7 @@ function AdminDashboard() {
         </View>
         {donations.slice(0, 4).map((d) => (
           <View key={d.id} style={adm.row}>
-            <View style={[adm.avatar, { backgroundColor: "#FFFBEB" }]}>
+            <View style={[adm.avatar, { backgroundColor: "#F8FAFC" }]}>
               <Feather name="gift" size={16} color="#F59E0B" />
             </View>
             <View style={{ flex: 1 }}>
@@ -321,29 +237,33 @@ function AdminDashboard() {
             <Text style={adm.viewAll}>View All</Text>
           </Pressable>
         </View>
-        {PENDING_REPORTS.map((r) => (
-          <View key={r.id} style={adm.row}>
-            <View style={[adm.avatar, { backgroundColor: r.color + "15" }]}>
-              <Feather name="flag" size={14} color={r.color} />
+        {reportsLoading ? <ActivityIndicator color="#2563EB" /> : pendingReports.length ? pendingReports.slice(0, 4).map((report) => (
+          <View key={report.id} style={adm.row}>
+            <View style={[adm.avatar, { backgroundColor: "#F8FAFC" }]}>
+              <Feather name="flag" size={14} color="#EF4444" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={adm.rowTitle}>{r.title}</Text>
-              <Text style={adm.rowSub}>{r.desc}</Text>
+              <Text style={adm.rowTitle}>{report.reason}</Text>
+              <Text style={adm.rowSub}>{report.requestTitle} · {report.reporterName}</Text>
             </View>
-            <Text style={{ fontSize: 10, color: "#94A3B8", fontFamily: "Inter_400Regular" }}>{r.time}</Text>
+            <Pressable onPress={() => handleResolveReport(report.id)} style={adm.resolveButton}>
+              <Text style={adm.resolveText}>Resolve</Text>
+            </Pressable>
           </View>
-        ))}
+        )) : <Text style={adm.rowSub}>No pending reports.</Text>}
       </View>
+
+      <AdminUserActivityFeed />
 
       {/* System Summary */}
       <View style={adm.card}>
         <Text style={[adm.cardTitle, { marginBottom: 10 }]}>System Summary</Text>
-        {SYSTEM_SUMMARY.map((s, i) => (
-          <View key={s.label} style={[adm.summaryRow, i < SYSTEM_SUMMARY.length - 1 && { borderBottomWidth: 1, borderBottomColor: "#F1F5F9" }]}>
-            <Text style={{ fontSize: 13, fontFamily: "Inter_500Medium", color: "#475569" }}>{s.label}</Text>
+        {systemSummary.map((summary, i) => (
+          <View key={summary.label} style={[adm.summaryRow, i < systemSummary.length - 1 && { borderBottomWidth: 1, borderBottomColor: "#F8FAFC" }]}>
+            <Text style={{ fontSize: 13, fontFamily: "Inter_500Medium", color: "#64748B" }}>{summary.label}</Text>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-              <Text style={{ fontSize: 13, fontFamily: "Inter_700Bold", color: "#1E293B" }}>{s.val}</Text>
-              <Feather name="chevron-right" size={13} color="#CBD5E1" />
+              <Text style={{ fontSize: 13, fontFamily: "Inter_700Bold", color: "#1E3A5F" }}>{summary.val}</Text>
+              <Feather name="chevron-right" size={13} color="#DBEAFE" />
             </View>
           </View>
         ))}
@@ -358,12 +278,22 @@ function CommunityFeed() {
   const router = useRouter();
   const { requests, loading: reqLoading } = useHelp();
   const { donations } = useDonations();
+  const { announcements } = useAnnouncements();
 
   type FeedItem =
     | { kind: "request"; id: string; title: string; name: string; sub: string; ts: string; emergency: boolean }
-    | { kind: "donation"; id: string; title: string; name: string; sub: string; ts: string };
+    | { kind: "donation"; id: string; title: string; name: string; sub: string; ts: string }
+    | { kind: "announcement"; id: string; title: string; name: string; sub: string; ts: string };
 
   const feed: FeedItem[] = [
+    ...announcements.slice(0, 6).map((a) => ({
+      kind: "announcement" as const,
+      id: a.id,
+      title: a.title,
+      name: a.createdByName,
+      sub: a.category.charAt(0).toUpperCase() + a.category.slice(1),
+      ts: a.createdAt,
+    })),
     ...requests.slice(0, 8).map((r) => ({
       kind: "request" as const,
       id: r.id,
@@ -408,22 +338,28 @@ function CommunityFeed() {
         feed.map((item) => {
           const isEmergency = item.kind === "request" && item.emergency;
           const iconName =
-            item.kind === "donation"
+            item.kind === "announcement"
+              ? "megaphone"
+              : item.kind === "donation"
               ? "gift"
               : isEmergency
               ? "alert-triangle"
               : "life-buoy";
           const iconBg =
-            item.kind === "donation"
-              ? "#F3E8FF"
+            item.kind === "announcement"
+              ? "#EFF6FF"
+              : item.kind === "donation"
+              ? "#EFF6FF"
               : isEmergency
-              ? "#FEE2E2"
+              ? "#F8FAFC"
               : "#DBEAFE";
           const iconColor =
-            item.kind === "donation"
+            item.kind === "announcement"
+              ? "#0F2747"
+              : item.kind === "donation"
               ? "#7C3AED"
               : isEmergency
-              ? "#DC2626"
+              ? "#EF4444"
               : "#2563EB";
 
           return (
@@ -454,7 +390,7 @@ function CommunityFeed() {
                   </Text>
                 </View>
                 <Text style={[feed_s.itemSub, { color: colors.mutedForeground }]} numberOfLines={1}>
-                  {item.kind === "donation" ? "🎁 " : ""}
+                  {item.kind === "donation" ? "🎁 " : item.kind === "announcement" ? "📢 " : ""}
                   {item.name} · {item.sub}
                 </Text>
               </View>
@@ -506,12 +442,12 @@ const feed_s = StyleSheet.create({
   itemTitle: { fontSize: 13, fontFamily: "Inter_600SemiBold", flex: 1 },
   itemSub: { fontSize: 11, fontFamily: "Inter_400Regular" },
   emergencyPill: {
-    backgroundColor: "#DC2626",
+    backgroundColor: "#EF4444",
     borderRadius: 4,
     paddingHorizontal: 5,
     paddingVertical: 1,
   },
-  emergencyPillText: { fontSize: 9, fontFamily: "Inter_700Bold", color: "#fff", letterSpacing: 0.5 },
+  emergencyPillText: { fontSize: 9, fontFamily: "Inter_700Bold", color: "#FFFFFF", letterSpacing: 0.5 },
   time: { fontSize: 10, fontFamily: "Inter_400Regular" },
 });
 
@@ -519,18 +455,10 @@ const feed_s = StyleSheet.create({
 export default function HomeScreen() {
   const colors = useColors();
   const { user } = useAuth();
-  const { addDonation } = useDonations();
-  const { createEmergencyAlert } = useEmergencyAlerts();
-  const { myCoords } = useLocation();
   const { activeCount } = usePresence();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const [donateVisible, setDonateVisible] = useState(false);
-  const [emergencyVisible, setEmergencyVisible] = useState(false);
-  const [selectedItem, setSelectedItem] = useState<{ type: string; icon: string } | null>(null);
-  const [selectedQty, setSelectedQty] = useState<number | null>(null);
-  const [donateNote, setDonateNote] = useState("");
-  const [selectedDestination, setSelectedDestination] = useState<DonationDestination | null>(null);
+  const { width } = useWindowDimensions();
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const bottomPad = Platform.OS === "web" ? 84 : insets.bottom + 50;
@@ -538,83 +466,6 @@ export default function HomeScreen() {
   function tap(action: () => void) {
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     action();
-  }
-
-  async function callEmergencyService(
-    service: (typeof SOUTH_AFRICA_EMERGENCY_SERVICES)[number]
-  ) {
-    const phoneNumber = service.number.replace(/\s/g, "");
-    const callUrl = `tel:${phoneNumber}`;
-
-    // Persist the emergency alert in the background. The call itself must not
-    // wait for network, geocoding, or a fresh GPS reading.
-    void (async () => {
-      let location:
-        | { latitude: number; longitude: number; address?: string }
-        | undefined = myCoords
-        ? { latitude: myCoords.latitude, longitude: myCoords.longitude }
-        : undefined;
-
-      if (!location) {
-        try {
-          const permission = await Location.requestForegroundPermissionsAsync();
-          if (permission.status === "granted") {
-            const position = await Location.getCurrentPositionAsync({
-              accuracy: Location.Accuracy.High,
-            });
-            let address: string | undefined;
-            try {
-              const places = await Location.reverseGeocodeAsync({
-                latitude: position.coords.latitude,
-                longitude: position.coords.longitude,
-              });
-              if (places[0]) {
-                const place = places[0];
-                address = [place.name, place.street, place.city, place.region]
-                  .filter(Boolean)
-                  .join(", ");
-              }
-            } catch {}
-
-            location = {
-              latitude: position.coords.latitude,
-              longitude: position.coords.longitude,
-              address,
-            }
-          }
-        } catch {}
-      }
-
-      try {
-        await createEmergencyAlert({
-          serviceKey: service.key,
-          serviceName: service.name,
-          serviceNumber: service.number,
-          location,
-        });
-      } catch (error) {
-        console.warn("[Emergency] Could not save admin alert:", error);
-      }
-    })();
-
-    try {
-      const canCall = await Linking.canOpenURL(callUrl);
-      if (!canCall) {
-        Alert.alert(
-          "Calling unavailable",
-          `Your device cannot open the phone app. Please call ${service.number} manually.`
-        );
-        return;
-      }
-
-      setEmergencyVisible(false);
-      await Linking.openURL(callUrl);
-    } catch {
-      Alert.alert(
-        "Could not start call",
-        `Please call ${service.number} manually for ${service.name}.`
-      );
-    }
   }
 
   const greeting = () => {
@@ -629,73 +480,73 @@ export default function HomeScreen() {
   const ACTION_BUTTONS = [
     {
       key: "emergency-assistance",
-      emoji: "🚨",
+      icon: "alert-triangle",
       title: "Emergency Assistance",
-      shortTitle: "Emergency",
-      sub: "Get urgent help now",
-      colors: ["#DC2626", "#B91C1C"] as [string, string],
-      onPress: () => tap(() => setEmergencyVisible(true)),
+      sub: "Get urgent support from your community.",
+      colors: ["#2563EB", "#0F2747"] as [string, string],
+      titleColor: "#FFFFFF",
+      subColor: "rgba(255,255,255,0.82)",
+      iconSurface: "rgba(239,68,68,0.22)",
+      onPress: () => tap(() => router.push("/emergency-assistance" as any)),
     },
     {
       key: "community",
-      emoji: "🤝",
-      title: "Community Center",
-      shortTitle: "Community",
-      sub: "Connect with your community",
-      colors: ["#7C3AED", "#6D28D9"] as [string, string],
+      icon: "map-pin",
+      title: "Community Centre",
+      sub: "View approved local centres and details.",
+      colors: ["#E0F2FE", "#EFF6FF"] as [string, string],
+      titleColor: "#0F2747",
+      subColor: "#475569",
+      iconSurface: "rgba(37,99,235,0.12)",
+      borderColor: "#BFDBFE",
       onPress: () => tap(() => router.push("/community-centres" as any)),
     },
     {
-      key: "chat",
-      emoji: "💬",
-      title: "Community Chat",
-      shortTitle: "Chat",
-      sub: "Talk with your community",
-      colors: ["#14B8A6", "#0D9488"] as [string, string],
-      onPress: () => tap(() => router.push("/(tabs)/chat" as any)),
+      key: "updates",
+      icon: "bell",
+      title: "Community Updates",
+      sub: "Read official community notices.",
+      colors: ["#FFFFFF", "#EFF6FF"] as [string, string],
+      titleColor: "#0F2747",
+      subColor: "#475569",
+      iconSurface: "rgba(37,99,235,0.12)",
+      borderColor: "#BFDBFE",
+      onPress: () => tap(() => router.push("/community-updates" as any)),
     },
     {
       key: "donate",
-      emoji: "🎁",
-      title: "Donate",
-      shortTitle: "Donate",
-      sub: "Support HelpChain",
-      colors: ["#0EA5E9", "#0284C7"] as [string, string],
-      onPress: () => tap(() => {
-        setSelectedDestination(null);
-        setDonateVisible(true);
-      }),
+      icon: "gift",
+      title: "Donation",
+      sub: "Donate what you can to local community centres.",
+      colors: ["#14B8A9", "#2563EB"] as [string, string],
+      titleColor: "#FFFFFF",
+      subColor: "rgba(255,255,255,0.84)",
+      iconSurface: "rgba(255,255,255,0.22)",
+      onPress: () => tap(() => router.push("/donation" as any)),
     },
   ];
 
-  // ── Admin view ────────────────────────────────────────────────────────────
   if (isAdmin) {
     return (
-      <View style={{ flex: 1, backgroundColor: "#F1F5F9" }}>
-        <LinearGradient colors={["#1F2937", "#1E3A8A"]} style={[styles.headerGrad, { paddingTop: topPad }]}>
+      <View style={{ flex: 1, backgroundColor: colors.background }}>
+        <LinearGradient colors={["#0F2747", "#2563EB", "#14B8A9"]} style={[styles.headerGrad, { paddingTop: topPad }]}>
           <View style={styles.headerRow}>
             <View style={styles.greetingCol}>
               <Text style={styles.greetingSmall}>{greeting()},</Text>
               <Text style={styles.greetingName}>{user?.name?.split(" ")[0] ?? "Friend"}</Text>
-              <Text style={styles.slogan}>Help together. Grow together.</Text>
             </View>
             <View style={styles.headerRight}>
-              <Pressable
-                onPress={() => tap(() => router.push("/admin" as any))}
-                style={[styles.adminBtn, { backgroundColor: "#14B8A6" }]}
-              >
-                <Feather name="settings" size={14} color="#fff" />
+              <Pressable onPress={() => tap(() => router.push("/admin" as any))} style={[styles.adminBtn, { backgroundColor: "#14B8A6" }]}>
+                <Feather name="settings" size={14} color="#FFFFFF" />
                 <Text style={styles.adminBtnText}>Full View</Text>
               </Pressable>
-              <UserAvatar name={user?.name ?? "U"} size={44} isAdmin />
+              <Pressable onPress={() => router.push("/(tabs)/profile" as any)} accessibilityRole="button" accessibilityLabel="Open profile">
+                <UserAvatar name={user?.name ?? "U"} size={44} isAdmin />
+              </Pressable>
             </View>
           </View>
         </LinearGradient>
-        <ScrollView
-          style={{ flex: 1 }}
-          contentContainerStyle={{ padding: 14, paddingBottom: bottomPad }}
-          showsVerticalScrollIndicator={false}
-        >
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: bottomPad }} showsVerticalScrollIndicator={false}>
           <AdminDashboard />
         </ScrollView>
       </View>
@@ -709,344 +560,61 @@ export default function HomeScreen() {
         contentContainerStyle={[styles.communityScroll, { paddingTop: topPad, paddingBottom: bottomPad }]}
         showsVerticalScrollIndicator={false}
       >
-        {/* ── Community Center header ── */}
-        <LinearGradient colors={["#1F2937", "#1D4ED8"]} style={styles.communityHeader}>
+        <LinearGradient colors={["#0F2747", "#2563EB", "#14B8A9"]} style={styles.communityHeader}>
           <View style={styles.communityHeaderTop}>
-            <View style={styles.greetingCol}>
-              <Text style={styles.communityGreeting}>{greeting()}</Text>
-              <Text style={styles.communityName}>{user?.name?.split(" ")[0] ?? "Friend"}</Text>
-              <View style={styles.activeRow}>
-                <View style={styles.activeDot} />
-                <Text style={styles.communityActiveText}>
-                  {activeCount > 0
-                    ? `${activeCount} member${activeCount === 1 ? "" : "s"} active`
-                    : "Community online"}
-                </Text>
+            <View style={styles.homeBrand}>
+              <HelpChainLogo width={100} height={61} light />
+              <View style={styles.greetingCol}>
+                <Text style={styles.communityGreeting}>{greeting()}</Text>
+                <Text style={styles.communityName}>Hi, {user?.name?.split(" ")[0] ?? "Friend"}</Text>
+                <View style={styles.activeRow}>
+                  <View style={styles.activeDot} />
+                  <Text style={styles.communityActiveText}>
+                    {activeCount > 0 ? `${activeCount} member${activeCount === 1 ? "" : "s"} active` : "Community online"}
+                  </Text>
+                </View>
               </View>
             </View>
-            <UserAvatar name={user?.name ?? "U"} size={48} />
+            <Pressable onPress={() => router.push("/(tabs)/profile" as any)} accessibilityRole="button" accessibilityLabel="Open profile">
+              <UserAvatar name={user?.name ?? "U"} size={48} />
+            </Pressable>
           </View>
         </LinearGradient>
 
-        <View style={styles.communityBody}>
-          {/* ── Main actions ── */}
+        <View style={[styles.communityBody, { maxWidth: 1160, alignSelf: "center", width: "100%" }]}>
           <View style={styles.sectionHeading}>
             <Text style={[styles.sectionTitle, { color: colors.foreground }]}>How can we help?</Text>
-            <Text style={[styles.sectionHint, { color: colors.mutedForeground }]}>Choose an action</Text>
+            <Text style={[styles.sectionHint, { color: colors.mutedForeground }]}>Four ways to get support</Text>
           </View>
           <View style={styles.actionGrid}>
-            {ACTION_BUTTONS.map((btn) => (
+            {ACTION_BUTTONS.map((button) => (
               <Pressable
-                key={btn.key}
-                onPress={btn.onPress}
-                style={({ pressed }) => [styles.centerAction, { opacity: pressed ? 0.82 : 1 }]}
+                key={button.key}
+                onPress={button.onPress}
+                accessibilityRole="button"
+                style={({ pressed }) => [styles.centerAction, { width: width >= 360 ? "48%" : "100%", opacity: pressed ? 0.86 : 1 }]}
               >
-                <LinearGradient colors={btn.colors} style={styles.centerActionInner}>
-                  <View style={styles.centerIconRing}>
-                    <Text style={styles.centerEmoji}>{btn.emoji}</Text>
+                <LinearGradient
+                  colors={button.colors}
+                  style={[
+                    styles.centerActionInner,
+                    {
+                      borderColor: button.borderColor ?? "transparent",
+                      borderWidth: button.borderColor ? 1 : 0,
+                    },
+                  ]}
+                >
+                  <View style={[styles.centerIconRing, { backgroundColor: button.iconSurface }]}>
+                    <Feather name={button.icon as any} size={23} color={button.titleColor} />
                   </View>
-                  <Text style={styles.centerActionTitle}>{btn.title}</Text>
-                  <Text style={styles.centerActionSub}>{btn.sub}</Text>
+                  <Text style={[styles.centerActionTitle, { color: button.titleColor }]}>{button.title}</Text>
+                  <Text style={[styles.centerActionSub, { color: button.subColor }]}>{button.sub}</Text>
                 </LinearGradient>
               </Pressable>
             ))}
           </View>
-
-          {/* ── Community status ── */}
-          <View style={[styles.communityStatus, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <View style={styles.communityStatusIcon}>
-              <Text style={styles.communityStatusEmoji}>🤝</Text>
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.communityStatusTitle, { color: colors.foreground }]}>Our community is here</Text>
-              <Text style={[styles.communityStatusSub, { color: colors.mutedForeground }]}>
-                {activeCount > 0 ? `${activeCount} people are active right now` : "People are ready to help"}
-              </Text>
-            </View>
-            <View style={styles.onlineBadge}>
-              <View style={styles.activeDot} />
-              <Text style={styles.onlineBadgeText}>LIVE</Text>
-            </View>
-          </View>
-
-          {/* ── Live community activity ── */}
-          <CommunityFeed />
         </View>
       </ScrollView>
-
-      {/* Emergency service chooser */}
-      <Modal
-        visible={emergencyVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setEmergencyVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.emergencyModal, { backgroundColor: colors.card }]}>
-            <View style={styles.modalHandle} />
-            <View style={styles.emergencyModalHeader}>
-              <View style={styles.emergencyHeaderIcon}>
-                <Text style={styles.emergencyHeaderEmoji}>🚨</Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.emergencyModalTitle, { color: colors.foreground }]}>
-                  Emergency Assistance
-                </Text>
-                <Text style={[styles.emergencyModalSub, { color: colors.mutedForeground }]}>
-                  South Africa emergency services
-                </Text>
-              </View>
-              <Pressable
-                onPress={() => setEmergencyVisible(false)}
-                accessibilityRole="button"
-                accessibilityLabel="Close emergency services"
-                style={[styles.emergencyClose, { backgroundColor: colors.background }]}
-              >
-                <Text style={[styles.emergencyCloseText, { color: colors.mutedForeground }]}>×</Text>
-              </Pressable>
-            </View>
-
-            <Text style={[styles.emergencyPrompt, { color: colors.foreground }]}>
-              Tap a service to call now
-            </Text>
-
-            <ScrollView
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.emergencyServiceList}
-            >
-              {SOUTH_AFRICA_EMERGENCY_SERVICES.map((service) => (
-                <Pressable
-                  key={service.key}
-                  onPress={() => callEmergencyService(service)}
-                  style={({ pressed }) => [
-                    styles.emergencyService,
-                    {
-                      backgroundColor: colors.background,
-                      borderColor: colors.border,
-                      opacity: pressed ? 0.75 : 1,
-                    },
-                  ]}
-                >
-                  <View style={[styles.emergencyServiceEmojiWrap, { backgroundColor: service.color + "18" }]}>
-                    <Text style={styles.emergencyServiceEmoji}>{service.emoji}</Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.emergencyServiceName, { color: colors.foreground }]}>
-                      {service.name}
-                    </Text>
-                    <Text style={[styles.emergencyServiceDescription, { color: colors.mutedForeground }]}>
-                      {service.description}
-                    </Text>
-                    <Text style={[styles.emergencyServiceNumber, { color: service.color }]}>
-                      Call {service.number}
-                    </Text>
-                  </View>
-                  <Text style={[styles.emergencyServiceArrow, { color: service.color }]}>›</Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-
-            <View style={styles.emergencyNote}>
-              <Text style={styles.emergencyNoteIcon}>📍</Text>
-              <Text style={styles.emergencyNoteText}>
-                Tapping a number opens your phone’s call screen. Tell the operator your exact location;
-                Android may share emergency location when your device and network support it.
-              </Text>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Donate Modal */}
-      <Modal visible={donateVisible} transparent animationType="slide">
-          <View style={styles.modalOverlay}>
-            <View style={[styles.donateModal, { backgroundColor: colors.card }]}>
-              <View style={styles.modalHandle} />
-              <LinearGradient colors={["#14B8A6", "#0D9488"]} style={styles.modalHeader}>
-                <Image source={logo} style={styles.modalLogo} resizeMode="contain" />
-                <Text style={styles.modalTitle}>Donate to Community</Text>
-                <Text style={[styles.modalSub, { color: "rgba(255,255,255,0.8)", paddingHorizontal: 0 }]}>
-                  Give food, clothes, books or other essentials
-                </Text>
-              </LinearGradient>
-
-              <ScrollView
-                showsVerticalScrollIndicator={false}
-                keyboardShouldPersistTaps="handled"
-                contentContainerStyle={{ gap: 16, paddingHorizontal: 20, paddingBottom: 12 }}
-              >
-                <DonationCentersMap
-                  selectedDestination={selectedDestination}
-                  onSelectDestination={setSelectedDestination}
-                />
-
-                {/* Category picker */}
-                <Text style={[styles.donateLabel, { color: colors.foreground }]}>What would you like to donate?</Text>
-                <View style={styles.itemGrid}>
-                  {[
-                    { type: "Food", icon: "shopping-bag" },
-                    { type: "Clothes", icon: "tag" },
-                    { type: "Books", icon: "book-open" },
-                    { type: "Medicine", icon: "heart" },
-                    { type: "Electronics", icon: "monitor" },
-                    { type: "Other", icon: "package" },
-                  ].map((item) => {
-                    const active = selectedItem?.type === item.type;
-                    return (
-                      <Pressable
-                        key={item.type}
-                        onPress={() => setSelectedItem(item)}
-                        style={[
-                          styles.itemBtn,
-                          {
-                            borderColor: active ? "#14B8A6" : colors.border,
-                            backgroundColor: active ? "#F0FDFA" : colors.card,
-                          },
-                        ]}
-                      >
-                        <View style={[styles.itemIconCircle, { backgroundColor: active ? "#14B8A6" : "#F1F5F9" }]}>
-                          <Feather name={item.icon as any} size={20} color={active ? "#fff" : "#64748B"} />
-                        </View>
-                        <Text style={[styles.itemLabel, { color: active ? "#0D9488" : colors.foreground }]}>{item.type}</Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-
-                {/* Quantity picker */}
-                <Text style={[styles.donateLabel, { color: colors.foreground }]}>How many / how much?</Text>
-                <View style={styles.qtyRow}>
-                  {[1, 2, 5, 10].map((q) => {
-                    const active = selectedQty === q;
-                    return (
-                      <Pressable
-                        key={q}
-                        onPress={() => setSelectedQty(q)}
-                        style={[
-                          styles.qtyBtn,
-                          {
-                            borderColor: active ? "#14B8A6" : colors.border,
-                            backgroundColor: active ? "#F0FDFA" : colors.card,
-                          },
-                        ]}
-                      >
-                        <Text style={[styles.qtyText, { color: active ? "#0D9488" : colors.foreground }]}>{q}{q === 10 ? "+" : ""}</Text>
-                        <Text style={[styles.qtyUnit, { color: colors.mutedForeground }]}>item{q !== 1 ? "s" : ""}</Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-
-                {/* Note */}
-                <Text style={[styles.donateLabel, { color: colors.foreground }]}>Add a note <Text style={{ color: colors.mutedForeground, fontFamily: "Inter_400Regular" }}>(optional)</Text></Text>
-                <TextInput
-                  value={donateNote}
-                  onChangeText={setDonateNote}
-                  placeholder="e.g. Winter jackets, size M and L..."
-                  placeholderTextColor={colors.mutedForeground}
-                  multiline
-                  numberOfLines={2}
-                  style={[styles.noteInput, { borderColor: colors.border, color: colors.foreground, backgroundColor: colors.background }]}
-                />
-
-                {/* Submit */}
-                <Pressable
-                  onPress={async () => {
-                    if (!selectedItem) {
-                      Alert.alert("Select an item", "Please choose what you'd like to donate.");
-                      return;
-                    }
-                    if (!user) {
-                      Alert.alert("Not signed in", "Please sign in to donate.");
-                      return;
-                    }
-                    if (!selectedDestination) {
-                      Alert.alert(
-                        "Choose a destination",
-                        "Please select a nearby church or community center for your donation."
-                      );
-                      return;
-                    }
-                    const qty = selectedQty ?? 1;
-                    const itemSnapshot = { ...selectedItem };
-                    const noteSnapshot = donateNote;
-                    const destinationSnapshot = { ...selectedDestination };
-                    setDonateVisible(false);
-                    setSelectedItem(null);
-                    setSelectedQty(null);
-                    setDonateNote("");
-                    setSelectedDestination(null);
-                    try {
-                      // ── Capture donor GPS (best-effort — donation proceeds even if denied) ──
-                      let donorLocation: { latitude: number; longitude: number; address?: string } | undefined;
-                      try {
-                        const { status } = await Location.requestForegroundPermissionsAsync();
-                        if (status === "granted") {
-                          const pos = await Location.getCurrentPositionAsync({
-                            accuracy: Location.Accuracy.Balanced,
-                          });
-                          let address: string | undefined;
-                          try {
-                            const geo = await Location.reverseGeocodeAsync({
-                              latitude: pos.coords.latitude,
-                              longitude: pos.coords.longitude,
-                            });
-                            if (geo[0]) {
-                              const g = geo[0];
-                              address = [g.name, g.street, g.city, g.region]
-                                .filter(Boolean)
-                                .join(", ");
-                            }
-                          } catch {}
-                          donorLocation = {
-                            latitude: pos.coords.latitude,
-                            longitude: pos.coords.longitude,
-                            address,
-                          };
-                        }
-                      } catch {}
-                      await addDonation(
-                        user.id,
-                        user.name,
-                        itemSnapshot.type,
-                        itemSnapshot.icon,
-                        qty,
-                        noteSnapshot || undefined,
-                        donorLocation,
-                        destinationSnapshot
-                      );
-                      Alert.alert(
-                        "Thank you! 🙏",
-                        `Your donation of ${qty} ${itemSnapshot.type} item${qty !== 1 ? "s" : ""} has been registered for ${destinationSnapshot.name}. Use Navigate to get directions.`
-                      );
-                    } catch {
-                      Alert.alert("Donation Failed", "Could not save your donation. Please check your connection and try again.");
-                    }
-                  }}
-                  style={[styles.donateSendBtn, { backgroundColor: "#14B8A6" }]}
-                >
-                  <Feather name="heart" size={18} color="#fff" />
-                  <Text style={styles.donateSendText}>
-                    Donate{selectedItem ? ` ${selectedQty ?? 1} ${selectedItem.type}` : ""}
-                  </Text>
-                </Pressable>
-
-                <Pressable
-                  onPress={() => {
-                    setDonateVisible(false);
-                    setSelectedItem(null);
-                    setSelectedQty(null);
-                    setDonateNote("");
-                    setSelectedDestination(null);
-                  }}
-                  style={styles.cancelBtn}
-                >
-                  <Text style={[styles.cancelText, { color: colors.mutedForeground }]}>Cancel</Text>
-                </Pressable>
-              </ScrollView>
-            </View>
-          </View>
-      </Modal>
     </View>
   );
 }
@@ -1055,11 +623,11 @@ export default function HomeScreen() {
 const adm = StyleSheet.create({
   statCard: {
     width: 130,
-    backgroundColor: "#fff",
+    backgroundColor: "#FFFFFF",
     borderRadius: 14,
     padding: 14,
     gap: 6,
-    shadowColor: "#000",
+    shadowColor: "#0B1F3A",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
     shadowRadius: 4,
@@ -1069,14 +637,14 @@ const adm = StyleSheet.create({
     width: 44, height: 44, borderRadius: 22,
     alignItems: "center", justifyContent: "center",
   },
-  statVal: { fontSize: 22, fontFamily: "Inter_700Bold", color: "#1E293B" },
+  statVal: { fontSize: 22, fontFamily: "Inter_700Bold", color: "#1E3A5F" },
   statLabel: { fontSize: 11, fontFamily: "Inter_500Medium", color: "#64748B" },
   card: {
-    backgroundColor: "#fff",
+    backgroundColor: "#FFFFFF",
     borderRadius: 14,
     padding: 16,
     marginBottom: 14,
-    shadowColor: "#000",
+    shadowColor: "#0B1F3A",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 6,
@@ -1086,21 +654,23 @@ const adm = StyleSheet.create({
     flexDirection: "row", alignItems: "center",
     justifyContent: "space-between", marginBottom: 14,
   },
-  cardTitle: { fontSize: 14, fontFamily: "Inter_700Bold", color: "#1E293B" },
+  cardTitle: { fontSize: 14, fontFamily: "Inter_700Bold", color: "#1E3A5F" },
   pill: {
     flexDirection: "row", alignItems: "center", gap: 3,
-    backgroundColor: "#F1F5F9", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8,
+    backgroundColor: "#F8FAFC", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8,
   },
   pillText: { fontSize: 11, color: "#64748B", fontFamily: "Inter_500Medium" },
   viewAll: { fontSize: 12, color: "#2563EB", fontFamily: "Inter_600SemiBold" },
+  resolveButton: { minHeight: 30, borderRadius: 7, backgroundColor: "#EFF6FF", paddingHorizontal: 9, alignItems: "center", justifyContent: "center" },
+  resolveText: { color: "#2563EB", fontSize: 10, fontFamily: "Inter_600SemiBold" },
   row: {
     flexDirection: "row", alignItems: "center", gap: 12,
     paddingVertical: 9, borderTopWidth: 1, borderTopColor: "#F8FAFC",
   },
   avatar: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center" },
   avatarText: { fontSize: 14, fontFamily: "Inter_700Bold" },
-  rowTitle: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#1E293B" },
-  rowSub: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#94A3B8" },
+  rowTitle: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#1E3A5F" },
+  rowSub: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#64748B" },
   badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
   badgeText: { fontSize: 10, fontFamily: "Inter_600SemiBold" },
   summaryRow: {
@@ -1115,15 +685,14 @@ const styles = StyleSheet.create({
   headerGrad: { paddingHorizontal: 20, paddingBottom: 22 },
   headerRow: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", paddingTop: 14, paddingHorizontal: 20 },
   greetingCol: { gap: 2, flex: 1 },
-  greetingSmall: { fontSize: 17, fontFamily: "Inter_700Bold", color: "#1E293B" },
-  greetingName: { fontSize: 22, fontFamily: "Inter_700Bold", color: "#1E3A8A" },
-  slogan: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#2563EB", marginTop: 2 },
+  greetingSmall: { fontSize: 17, fontFamily: "Inter_700Bold", color: "#1E3A5F" },
+  greetingName: { fontSize: 22, fontFamily: "Inter_700Bold", color: "#0F2747" },
   activeRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 4 },
   activeDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: "#10B981" },
   activeText: { fontSize: 11, fontFamily: "Inter_500Medium", color: "#10B981" },
   headerRight: { flexDirection: "row", alignItems: "center", gap: 10, marginLeft: 12 },
   adminBtn: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20 },
-  adminBtnText: { color: "#fff", fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  adminBtnText: { color: "#FFFFFF", fontSize: 12, fontFamily: "Inter_600SemiBold" },
   scroll: { padding: 16, gap: 16 },
   communityScroll: {
     flexGrow: 1,
@@ -1140,27 +709,28 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
+  homeBrand: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
   communityGreeting: {
     fontSize: 17,
     fontFamily: "Inter_700Bold",
-    color: "#fff",
+    color: "#FFFFFF",
     letterSpacing: 0.4,
   },
   communityName: {
     fontSize: 24,
     fontFamily: "Inter_700Bold",
-    color: "#fff",
+    color: "#FFFFFF",
     marginTop: 2,
   },
   communityActiveText: {
     fontSize: 12,
     fontFamily: "Inter_500Medium",
-    color: "#A7F3D0",
+    color: "#ECFDF5",
   },
   communityTitle: {
     fontSize: 22,
     fontFamily: "Inter_700Bold",
-    color: "#fff",
+    color: "#FFFFFF",
     letterSpacing: 1,
     marginTop: 22,
   },
@@ -1193,14 +763,14 @@ const styles = StyleSheet.create({
   actionGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 10,
+    justifyContent: "space-between",
+    rowGap: 14,
   },
   centerAction: {
-    width: "48%",
-    minHeight: 142,
-    borderRadius: 18,
+    height: 188,
+    borderRadius: 20,
     overflow: "hidden",
-    shadowColor: "#000",
+    shadowColor: "#0B1F3A",
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.16,
     shadowRadius: 6,
@@ -1210,9 +780,9 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 8,
-    paddingVertical: 14,
-    gap: 5,
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+    gap: 8,
   },
   centerIconRing: {
     width: 48,
@@ -1225,19 +795,15 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.48)",
     marginBottom: 2,
   },
-  centerEmoji: {
-    fontSize: 25,
-    lineHeight: 31,
-  },
   centerActionTitle: {
-    color: "#fff",
-    fontSize: 14,
+    color: "#FFFFFF",
+    fontSize: 16,
     fontFamily: "Inter_700Bold",
     textAlign: "center",
   },
   centerActionSub: {
     color: "rgba(255,255,255,0.78)",
-    fontSize: 10,
+    fontSize: 12,
     fontFamily: "Inter_400Regular",
     textAlign: "center",
   },
@@ -1283,7 +849,7 @@ const styles = StyleSheet.create({
   onlineBadgeText: {
     fontSize: 9,
     fontFamily: "Inter_700Bold",
-    color: "#059669",
+    color: "#10B981",
     letterSpacing: 0.5,
   },
   // full-screen map overlay
@@ -1293,14 +859,14 @@ const styles = StyleSheet.create({
     right: 12,
   },
   greetingCard: {
-    backgroundColor: "#fff",
+    backgroundColor: "#FFFFFF",
     borderRadius: 18,
     paddingHorizontal: 16,
     paddingVertical: 14,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    shadowColor: "#000",
+    shadowColor: "#0B1F3A",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.12,
     shadowRadius: 8,
@@ -1318,7 +884,7 @@ const styles = StyleSheet.create({
     flex: 1,
     borderRadius: 16,
     overflow: "hidden",
-    shadowColor: "#000",
+    shadowColor: "#0B1F3A",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
     shadowRadius: 8,
@@ -1341,7 +907,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   floatLabel: {
-    color: "#fff",
+    color: "#FFFFFF",
     fontSize: 11,
     fontFamily: "Inter_700Bold",
     textAlign: "center",
@@ -1357,7 +923,7 @@ const styles = StyleSheet.create({
   actionBtnHalf: { width: "47.5%" },
   actionBtnInner: { padding: 20, alignItems: "center", gap: 10, minHeight: 150, justifyContent: "center" },
   actionIconRing: { width: 56, height: 56, borderRadius: 28, backgroundColor: "rgba(255,255,255,0.18)", alignItems: "center", justifyContent: "center", marginBottom: 4 },
-  actionTitle: { color: "#fff", fontSize: 15, fontFamily: "Inter_700Bold", textAlign: "center" },
+  actionTitle: { color: "#FFFFFF", fontSize: 15, fontFamily: "Inter_700Bold", textAlign: "center" },
   actionSub: { color: "rgba(255,255,255,0.72)", fontSize: 11, fontFamily: "Inter_400Regular", textAlign: "center" },
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
   emergencyModal: {
@@ -1378,7 +944,7 @@ const styles = StyleSheet.create({
     width: 46,
     height: 46,
     borderRadius: 14,
-    backgroundColor: "#FEE2E2",
+    backgroundColor: "#F8FAFC",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1454,29 +1020,29 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
     borderRadius: 12,
-    backgroundColor: "#FFF7ED",
+    backgroundColor: "#F8FAFC",
     padding: 11,
     alignItems: "flex-start",
   },
   emergencyNoteIcon: { fontSize: 16 },
   emergencyNoteText: {
     flex: 1,
-    color: "#9A3412",
+    color: "#F59E0B",
     fontSize: 10,
     lineHeight: 15,
     fontFamily: "Inter_400Regular",
   },
   donateModal: { borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: "hidden", gap: 16, paddingBottom: 24 },
-  modalHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: "#E2E8F0", alignSelf: "center", marginTop: 12 },
+  modalHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: "#DBEAFE", alignSelf: "center", marginTop: 12 },
   modalHeader: { alignItems: "center", padding: 24, gap: 12 },
   modalLogo: { width: 60, height: 60, borderRadius: 16 },
-  modalTitle: { fontSize: 22, fontFamily: "Inter_700Bold", color: "#fff", textAlign: "center" },
+  modalTitle: { fontSize: 22, fontFamily: "Inter_700Bold", color: "#FFFFFF", textAlign: "center" },
   modalSub: { fontSize: 14, fontFamily: "Inter_400Regular", textAlign: "center", lineHeight: 20, paddingHorizontal: 24 },
   amountGrid: { flexDirection: "row", gap: 10, flexWrap: "wrap", paddingHorizontal: 24 },
   amountBtn: { flex: 1, minWidth: "40%", height: 52, borderRadius: 12, borderWidth: 1.5, alignItems: "center", justifyContent: "center" },
   amountText: { fontSize: 18, fontFamily: "Inter_700Bold" },
   donateSendBtn: { height: 54, borderRadius: 14, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10 },
-  donateSendText: { color: "#fff", fontSize: 16, fontFamily: "Inter_600SemiBold" },
+  donateSendText: { color: "#FFFFFF", fontSize: 16, fontFamily: "Inter_600SemiBold" },
   cancelBtn: { height: 44, alignItems: "center", justifyContent: "center" },
   cancelText: { fontSize: 14, fontFamily: "Inter_500Medium" },
   donateLabel: { fontSize: 13, fontFamily: "Inter_600SemiBold" },

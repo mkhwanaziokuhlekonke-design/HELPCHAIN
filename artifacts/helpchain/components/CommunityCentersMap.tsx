@@ -1,7 +1,8 @@
 import React, { useMemo, useRef, useState } from "react";
-import { Linking, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Linking, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useLocation } from "@/context/LocationContext";
+import { useCommunityCentres } from "@/context/CommunityCentreContext";
 import { useColors } from "@/hooks/useColors";
 import {
   CommunityCenter,
@@ -43,6 +44,7 @@ function buildMapHtml(
   .me{width:18px;height:18px;border-radius:50%;background:#2563EB;border:3px solid white;box-shadow:0 1px 6px rgba(37,99,235,.7)}
   .center{width:30px;height:30px;border-radius:15px;background:#0D9488;display:flex;align-items:center;justify-content:center;color:white;font-size:16px;font-weight:bold;border:2px solid white;box-shadow:0 2px 8px rgba(15,23,42,.35)}
   .center.selected{background:#F59E0B;outline:4px solid rgba(245,158,11,.3)}
+  .leaflet-tile{filter:saturate(.7) hue-rotate(150deg) brightness(1.04)}
   .leaflet-popup-content{margin:10px 12px;font-size:12px}.leaflet-popup-content b{font-size:13px}
 </style></head><body><div id="map"></div><script>
   var origin=[${origin.latitude},${origin.longitude}];
@@ -54,7 +56,7 @@ function buildMapHtml(
   var bounds=L.latLngBounds([origin]);
   L.marker(origin,{icon:L.divIcon({className:'',html:'<div class="me"></div>',iconSize:[18,18],iconAnchor:[9,9]})})
     .addTo(map).bindPopup('<b>Your location</b>');
-  function safeHtml(value){return String(value||'').replace(/[&<>"']/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'})[c]})}
+  function safeHtml(value){return String(value||'').replace(/[&<>"']/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#2563EB;'})[c]})}
   function selectCenter(id){
     var payload=JSON.stringify({type:'SELECT_CENTER',id:id});
     if(window.ReactNativeWebView)window.ReactNativeWebView.postMessage(payload);else window.parent.postMessage(payload,'*');
@@ -75,8 +77,10 @@ function buildMapHtml(
 export function CommunityCentersMap() {
   const colors = useColors();
   const { myCoords } = useLocation();
+  const { centres, loading } = useCommunityCentres();
   const origin = myCoords ?? WEST_ACRES_REFERENCE;
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [expandedCentreId, setExpandedCentreId] = useState<string | null>(null);
   const webViewRef = useRef<any>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const mapSource = useMemo(() => buildMapHtml(origin, selectedId), [origin, selectedId]);
@@ -85,7 +89,7 @@ export function CommunityCentersMap() {
     if (WEST_ACRES_CENTERS.some((center) => center.id === id)) setSelectedId(id);
   }
 
-  async function navigateTo(center: CommunityCenter) {
+  async function navigateTo(center: Pick<CommunityCenter, "name" | "address">) {
     const destination = encodeURIComponent(`${center.name}, ${center.address}`);
     const fallbackUrl = `https://www.google.com/maps/dir/?api=1&destination=${destination}&travelmode=driving`;
     const nativeUrl =
@@ -110,9 +114,9 @@ export function CommunityCentersMap() {
           <Feather name="map-pin" size={19} color={colors.teal} />
         </View>
         <View style={styles.headerText}>
-          <Text style={[styles.title, { color: colors.foreground }]}>West Acres community centres</Text>
+          <Text style={[styles.title, { color: colors.foreground }]}>Approved community centres</Text>
           <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
-            Two places to donate in Mbombela, Mpumalanga
+            Official locations and local support details
           </Text>
         </View>
       </View>
@@ -150,52 +154,105 @@ export function CommunityCentersMap() {
       <View style={styles.centerList}>
         {WEST_ACRES_CENTERS.map((center) => {
           const selected = selectedId === center.id;
+          const expanded = expandedCentreId === `static-${center.id}`;
           const distance = distanceKm(origin, center);
           return (
-            <View
-              key={center.id}
-              style={[
-                styles.centerRow,
-                {
-                  backgroundColor: selected ? colors.tealLight : colors.background,
-                  borderColor: selected ? colors.teal : colors.border,
-                },
-              ]}
-            >
-              <Pressable
-                onPress={() => selectCenter(center.id)}
-                accessibilityRole="button"
-                accessibilityLabel={`Select ${center.name}`}
-                accessibilityState={{ selected }}
-                style={styles.centerInfo}
+            <View key={center.id} style={styles.centreEntry}>
+              <View
+                style={[
+                  styles.centerRow,
+                  {
+                    backgroundColor: selected ? colors.tealLight : colors.background,
+                    borderColor: selected ? colors.teal : colors.border,
+                  },
+                ]}
               >
-                <View style={[styles.centerIcon, { backgroundColor: selected ? colors.teal : colors.secondary }]}>
-                  <Feather name="home" size={17} color={selected ? colors.accentForeground : colors.primary} />
-                </View>
-                <View style={styles.centerText}>
-                  <Text style={[styles.centerName, { color: colors.foreground }]} numberOfLines={1}>{center.name}</Text>
-                  <Text style={[styles.centerAddress, { color: colors.mutedForeground }]} numberOfLines={2}>
-                    {center.address}
-                  </Text>
-                  <Text style={[styles.centerDistance, { color: colors.teal }]}>
-                    {formatDistance(distance)} from {myCoords ? "you" : "West Acres"}
-                  </Text>
-                </View>
-                {selected && <Feather name="check-circle" size={18} color={colors.teal} />}
-              </Pressable>
+                <Pressable
+                  onPress={() => selectCenter(center.id)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Select ${center.name}`}
+                  accessibilityState={{ selected }}
+                  style={styles.centerInfo}
+                >
+                  <View style={[styles.centerIcon, { backgroundColor: selected ? colors.teal : colors.secondary }]}>
+                    <Feather name="home" size={17} color={selected ? colors.accentForeground : colors.primary} />
+                  </View>
+                  <View style={styles.centerText}>
+                    <Text style={[styles.centerName, { color: colors.foreground }]} numberOfLines={1}>{center.name}</Text>
+                    <Text style={[styles.centerAddress, { color: colors.mutedForeground }]} numberOfLines={2}>{center.address}</Text>
+                    <Text style={[styles.centerDistance, { color: colors.teal }]}>
+                      {formatDistance(distance)} from {myCoords ? "you" : "West Acres"}
+                    </Text>
+                  </View>
+                  {selected && <Feather name="check-circle" size={18} color={colors.teal} />}
+                </Pressable>
+                <Pressable
+                  onPress={() => navigateTo(center)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Navigate to ${center.name}`}
+                  style={styles.navigateButton}
+                >
+                  <Feather name="navigation" size={17} color={colors.primary} />
+                  <Text style={[styles.navigateText, { color: colors.primary }]}>View Location</Text>
+                </Pressable>
+              </View>
               <Pressable
-                onPress={() => navigateTo(center)}
+                onPress={() => setExpandedCentreId(expanded ? null : `static-${center.id}`)}
                 accessibilityRole="button"
-                accessibilityLabel={`Navigate to ${center.name}`}
-                style={styles.navigateButton}
+                accessibilityState={{ expanded }}
+                style={styles.viewDetailsButton}
               >
-                <Feather name="navigation" size={17} color={colors.primary} />
-                <Text style={[styles.navigateText, { color: colors.primary }]}>Navigate</Text>
+                <Text style={[styles.viewDetailsText, { color: colors.primary }]}>{expanded ? "Hide Details" : "View Details"}</Text>
+                <Feather name={expanded ? "chevron-up" : "chevron-down"} size={15} color={colors.primary} />
               </Pressable>
+              {expanded && <Text style={[styles.centreDescription, { color: colors.mutedForeground }]}>{center.description}</Text>}
             </View>
           );
         })}
       </View>
+
+      {(loading || centres.length > 0) && (
+        <View style={styles.officialCentres}>
+          <View style={styles.officialHeader}>
+            <Feather name="shield" size={16} color={colors.teal} />
+            <Text style={[styles.officialTitle, { color: colors.foreground }]}>HelpChain centres</Text>
+          </View>
+          {loading ? (
+            <ActivityIndicator color={colors.primary} />
+          ) : centres.map((center) => {
+            const expanded = expandedCentreId === `official-${center.id}`;
+            return (
+              <View key={center.id} style={[styles.officialCard, { backgroundColor: colors.background, borderColor: colors.border }]}>
+                <View style={styles.officialCopy}>
+                  <Text style={[styles.centerName, { color: colors.foreground }]}>{center.name}</Text>
+                  <Text style={[styles.centerAddress, { color: colors.mutedForeground }]}>{center.address}</Text>
+                  <View style={styles.officialActions}>
+                    <Pressable
+                      onPress={() => setExpandedCentreId(expanded ? null : `official-${center.id}`)}
+                      accessibilityRole="button"
+                      accessibilityState={{ expanded }}
+                      style={styles.viewDetailsButton}
+                    >
+                      <Text style={[styles.viewDetailsText, { color: colors.primary }]}>{expanded ? "Hide Details" : "View Details"}</Text>
+                      <Feather name={expanded ? "chevron-up" : "chevron-down"} size={15} color={colors.primary} />
+                    </Pressable>
+                    <Pressable onPress={() => navigateTo(center)} accessibilityRole="button" accessibilityLabel={`Navigate to ${center.name}`} style={styles.officialNavigate}>
+                      <Feather name="navigation" size={17} color={colors.primary} />
+                    </Pressable>
+                  </View>
+                  {expanded && (
+                    <View style={styles.officialDetails}>
+                      <Text style={[styles.officialDetail, { color: colors.mutedForeground }]}>Contact: {center.contact}</Text>
+                      <Text style={[styles.officialDetail, { color: colors.mutedForeground }]}>Hours: {center.openingHours}</Text>
+                      <Text style={[styles.officialDetail, { color: colors.foreground }]}>{center.description}</Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      )}
     </View>
   );
 }
@@ -235,12 +292,13 @@ const styles = StyleSheet.create({
   headerText: { flex: 1 },
   title: { fontSize: 15, fontFamily: "Inter_700Bold" },
   subtitle: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 3 },
-  mapFrame: { height: 230, borderRadius: 13, overflow: "hidden", backgroundColor: "#E0F2FE" },
+  mapFrame: { height: 230, borderRadius: 13, overflow: "hidden", backgroundColor: "#EFF6FF" },
   legend: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
   legendItem: { flexDirection: "row", alignItems: "center", gap: 5 },
   legendDot: { width: 8, height: 8, borderRadius: 4 },
   legendText: { fontSize: 10, fontFamily: "Inter_400Regular" },
   centerList: { gap: 8 },
+  centreEntry: { gap: 4 },
   centerRow: { borderWidth: 1, borderRadius: 13, flexDirection: "row", alignItems: "stretch", overflow: "hidden" },
   centerInfo: { flex: 1, flexDirection: "row", alignItems: "center", gap: 9, padding: 9 },
   centerIcon: { width: 35, height: 35, borderRadius: 10, alignItems: "center", justifyContent: "center" },
@@ -248,6 +306,18 @@ const styles = StyleSheet.create({
   centerName: { fontSize: 12, fontFamily: "Inter_700Bold" },
   centerAddress: { fontSize: 10, lineHeight: 14, fontFamily: "Inter_400Regular" },
   centerDistance: { fontSize: 10, fontFamily: "Inter_600SemiBold", marginTop: 2 },
-  navigateButton: { width: 72, alignItems: "center", justifyContent: "center", gap: 3, borderLeftWidth: 1, borderLeftColor: "#E2E8F0" },
+  navigateButton: { width: 72, alignItems: "center", justifyContent: "center", gap: 3, borderLeftWidth: 1, borderLeftColor: "#DBEAFE" },
   navigateText: { fontSize: 10, fontFamily: "Inter_600SemiBold" },
+  viewDetailsButton: { alignSelf: "flex-start", minHeight: 32, flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 4 },
+  viewDetailsText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
+  centreDescription: { paddingHorizontal: 4, fontSize: 11, lineHeight: 16, fontFamily: "Inter_400Regular" },
+  officialCentres: { gap: 9, marginTop: 4 },
+  officialHeader: { flexDirection: "row", alignItems: "center", gap: 7 },
+  officialTitle: { fontSize: 13, fontFamily: "Inter_700Bold" },
+  officialCard: { borderWidth: 1, borderRadius: 12, padding: 12, flexDirection: "row", alignItems: "center", gap: 10 },
+  officialCopy: { flex: 1, gap: 4 },
+  officialActions: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  officialDetails: { gap: 3, paddingTop: 2 },
+  officialDetail: { fontSize: 11, lineHeight: 16, fontFamily: "Inter_400Regular" },
+  officialNavigate: { width: 40, height: 40, borderRadius: 10, backgroundColor: "#EFF6FF", alignItems: "center", justifyContent: "center" },
 });

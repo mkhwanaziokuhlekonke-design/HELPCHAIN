@@ -14,6 +14,7 @@ import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Redirect } from "expo-router";
 import { UserAvatar } from "@/components/UserAvatar";
 import { useAuth } from "@/context/AuthContext";
 import { ChatMessage, useChat } from "@/context/ChatContext";
@@ -51,7 +52,7 @@ function MessageBubble({ msg, isOwn, online }: { msg: ChatMessage; isOwn: boolea
               : { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 },
           ]}
         >
-          <Text style={[styles.bubbleText, { color: isOwn ? "#fff" : colors.foreground }]}>{msg.text}</Text>
+          <Text style={[styles.bubbleText, { color: isOwn ? "#FFFFFF" : colors.foreground }]}>{msg.text}</Text>
         </View>
         <Text style={[styles.msgTime, { color: colors.mutedForeground, alignSelf: isOwn ? "flex-end" : "flex-start" }]}>
           {formatTime(msg.createdAt)}
@@ -63,7 +64,7 @@ function MessageBubble({ msg, isOwn, online }: { msg: ChatMessage; isOwn: boolea
 
 export default function ChatScreen() {
   const colors = useColors();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const { messages, sendMessage, loading, error } = useChat();
   const { addNotification } = useNotifications();
   const { activeCount, isOnline, lastSeenText, presenceMap } = usePresence();
@@ -77,6 +78,13 @@ export default function ChatScreen() {
   // Standard tab bar height is 49px; add safe-area bottom for notched iPhones.
   const TAB_BAR_HEIGHT = 49;
   const bottomPad = Platform.OS === "web" ? 8 : TAB_BAR_HEIGHT + insets.bottom + 8;
+
+  if (authLoading) {
+    return <ActivityIndicator style={{ flex: 1 }} color={colors.primary} />;
+  }
+  if (!user?.isAdmin) {
+    return <Redirect href="/(tabs)" />;
+  }
 
   useEffect(() => {
     if (!loading && messages.length) {
@@ -120,7 +128,7 @@ export default function ChatScreen() {
       behavior="padding"
       keyboardVerticalOffset={TAB_BAR_HEIGHT + insets.bottom}
     >
-      <LinearGradient colors={["#1F2937", "#0F4C75"]} style={[styles.header, { paddingTop: topPad }]}>
+      <LinearGradient colors={["#0F2747", "#0F2747"]} style={[styles.header, { paddingTop: topPad }]}>
         <View style={styles.headerInner}>
           <View style={styles.headerLeft}>
             <View style={[styles.chatIcon, { backgroundColor: "rgba(20,184,166,0.2)" }]}>
@@ -233,7 +241,7 @@ export default function ChatScreen() {
             },
           ]}
         >
-          <Feather name="send" size={18} color="#fff" />
+          <Feather name="send" size={18} color="#FFFFFF" />
         </Pressable>
       </View>
     </KeyboardAvoidingView>
@@ -266,7 +274,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontFamily: "Inter_700Bold",
-    color: "#fff",
+    color: "#FFFFFF",
   },
   onlineRow: {
     flexDirection: "row",
@@ -291,7 +299,7 @@ const styles = StyleSheet.create({
   },
   stackedAvatar: {
     borderWidth: 2,
-    borderColor: "#0F4C75",
+    borderColor: "#0F2747",
     borderRadius: 14,
   },
   list: {

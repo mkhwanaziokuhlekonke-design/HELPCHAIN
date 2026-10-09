@@ -17,8 +17,8 @@ if (Platform.OS !== "web") {
 
 // ── colour palette — one per user, deterministic from uid ────────────────
 const PALETTE = [
-  "#2563EB", "#DC2626", "#16A34A", "#D97706", "#7C3AED",
-  "#DB2777", "#0891B2", "#65A30D", "#EA580C", "#6366F1",
+  "#2563EB", "#EF4444", "#10B981", "#F59E0B", "#7C3AED",
+  "#EF4444", "#14B8A6", "#10B981", "#EF4444", "#7C3AED",
 ];
 function colorForUid(uid: string): string {
   let h = 0;
@@ -59,7 +59,7 @@ function buildLeafletHTML(users: UserLocation[], centerLat: number, centerLng: n
       position: absolute; top: -8px; left: -8px;
     }
     .dot-wrap { position: relative; width: 20px; height: 20px; }
-    .dot { width: 20px; height: 20px; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.4); }
+    .dot { width: 20px; height: 20px; border-radius: 50%; border: 3px solid #FFFFFF; box-shadow: 0 2px 8px rgba(0,0,0,0.4); }
   </style>
 </head>
 <body>
@@ -75,7 +75,7 @@ function buildLeafletHTML(users: UserLocation[], centerLat: number, centerLng: n
   function makeIcon(color, isMe) {
     var inner = isMe
       ? '<div class="dot-wrap"><div class="pulse-ring" style="background:' + color + '22;border:2px solid ' + color + ';"></div><div class="dot" style="background:' + color + ';"></div></div>'
-      : '<div class="dot" style="background:' + color + ';width:16px;height:16px;border:2.5px solid #fff;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,0.35);"></div>';
+      : '<div class="dot" style="background:' + color + ';width:16px;height:16px;border:2.5px solid #FFFFFF;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,0.35);"></div>';
     return L.divIcon({
       className: '',
       html: inner,
@@ -292,7 +292,7 @@ export function LiveLocationMap({ fullScreen = false }: LiveLocationMapProps) {
       <View style={StyleSheet.absoluteFill}>
         {!locationReady && !locationError && (
           <View style={[StyleSheet.absoluteFill, styles.loadOverlay]}>
-            <ActivityIndicator color="#fff" size="large" />
+            <ActivityIndicator color="#FFFFFF" size="large" />
             <Text style={styles.loadText}>Getting your location…</Text>
           </View>
         )}
@@ -361,7 +361,7 @@ export function LiveLocationMap({ fullScreen = false }: LiveLocationMapProps) {
 
       {locationError && (
         <View style={styles.errorBox}>
-          <Feather name="map-pin" size={18} color="#DC2626" />
+          <Feather name="map-pin" size={18} color="#EF4444" />
           <Text style={styles.errorMsg}>{locationError}</Text>
         </View>
       )}
@@ -396,7 +396,7 @@ const styles = StyleSheet.create({
   loadOverlay: {
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#1E3A8A",
+    backgroundColor: "#0F2747",
     gap: 12,
   },
   loadText: { color: "rgba(255,255,255,0.7)", fontSize: 13, fontFamily: "Inter_400Regular" },
@@ -410,12 +410,12 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.55)", borderRadius: 20,
     paddingHorizontal: 12, paddingVertical: 6,
   },
-  liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#22C55E" },
-  liveBadgeText: { color: "#fff", fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#10B981" },
+  liveBadgeText: { color: "#FFFFFF", fontSize: 12, fontFamily: "Inter_600SemiBold" },
   card: {
     borderRadius: 18, overflow: "hidden",
-    backgroundColor: "#fff",
-    shadowColor: "#000", shadowOffset: { width: 0, height: 2 },
+    backgroundColor: "#FFFFFF",
+    shadowColor: "#0B1F3A", shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.07, shadowRadius: 8, elevation: 3,
   },
   titleRow: {
@@ -423,18 +423,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingTop: 14, paddingBottom: 10,
   },
   dot: { width: 10, height: 10, borderRadius: 5 },
-  dotActive: { backgroundColor: "#22C55E" },
-  dotInactive: { backgroundColor: "#9CA3AF" },
-  title: { fontSize: 15, fontFamily: "Inter_700Bold", color: "#111827", flex: 1 },
-  subtitle: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#6B7280" },
+  dotActive: { backgroundColor: "#10B981" },
+  dotInactive: { backgroundColor: "#64748B" },
+  title: { fontSize: 15, fontFamily: "Inter_700Bold", color: "#0B1F3A827", flex: 1 },
+  subtitle: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#64748B" },
   centreBox: { height: 160, alignItems: "center", justifyContent: "center", gap: 10 },
-  centreText: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#6B7280" },
+  centreText: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#64748B" },
   errorBox: {
     flexDirection: "row", alignItems: "center", gap: 10,
     margin: 16, padding: 14, borderRadius: 12,
-    backgroundColor: "#FEF2F2", borderWidth: 1, borderColor: "#FECACA",
+    backgroundColor: "#F8FAFC", borderWidth: 1, borderColor: "#F8FAFC",
   },
-  errorMsg: { fontSize: 13, fontFamily: "Inter_500Medium", color: "#DC2626", flex: 1 },
+  errorMsg: { fontSize: 13, fontFamily: "Inter_500Medium", color: "#EF4444", flex: 1 },
   mapWrapper: { paddingHorizontal: 12, paddingBottom: 4, height: 224 },
   nativeMap: { height: 220, borderRadius: 12, overflow: "hidden" },
 });

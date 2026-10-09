@@ -2,6 +2,7 @@ import {
   addDoc,
   collection,
   doc,
+  getDoc,
   onSnapshot,
   query,
   serverTimestamp,
@@ -12,6 +13,7 @@ import {
 import { onAuthStateChanged } from "firebase/auth";
 import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 import { auth, db } from "@/lib/firebase";
+import { isOfflineFirestoreError } from "@/context/AuthContext";
 
 export type NotifType =
   | "help_accepted"
@@ -21,6 +23,9 @@ export type NotifType =
   | "new_request"
   | "new_donation"
   | "new_message"
+  | "community_update"
+  | "donation_registered"
+  | "donation_request"
   | "system";
 
 export interface AppNotification {
@@ -30,6 +35,11 @@ export interface AppNotification {
   type: NotifType;
   read: boolean;
   requestId?: string;
+  announcementId?: string;
+  donationId?: string;
+  itemType?: string;
+  quantity?: number;
+  communityCentre?: string;
   createdAt: string;
   /** "all" = broadcast; otherwise a specific uid */
   targetUserId: string;
@@ -40,6 +50,8 @@ export interface AppNotification {
 interface NotificationContextType {
   notifications: AppNotification[];
   unreadCount: number;
+  loading: boolean;
+  error: string | null;
   /** Most recent notification that arrived after initial load, not sent by current user */
   latestArrival: AppNotification | null;
   dismissArrival: () => void;
@@ -58,7 +70,10 @@ const NotificationContext = createContext<NotificationContextType | null>(null);
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [currentUid, setCurrentUid] = useState<string | null>(null);
+  const [currentIsAdmin, setCurrentIsAdmin] = useState(false);
   const [latestArrival, setLatestArrival] = useState<AppNotification | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   // Refs for new-arrival detection
   const isInitialLoadRef = useRef(true);
@@ -66,9 +81,33 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
   // Track auth state
   useEffect(() => {
+    if (!auth || !db) {
+      setCurrentUid(null);
+      setNotifications([]);
+      setLoading(false);
+      setError("Firebase is not configured. Notifications are unavailable.");
+      return;
+    }
+
     const unsub = onAuthStateChanged(auth, (fbUser) => {
       setCurrentUid(fbUser?.uid ?? null);
+      setCurrentIsAdmin(false);
+      setLoading(!!fbUser);
+      setError(null);
+      setNotifications([]);
+      setLatestArrival(null);
+      if (fbUser) {
+        getDoc(doc(db, "users", fbUser.uid))
+          .then((profile) => {
+            setCurrentIsAdmin(profile.exists() && profile.data().isAdmin === true);
+          })
+          .catch((err) => {
+            if (isOfflineFirestoreError(err)) return;
+            console.warn("[NotificationContext] profile lookup failed:", err?.code);
+          });
+      }
       if (!fbUser) {
+        setLoading(false);
         // Reset on sign-out so next sign-in gets a fresh initial load
         isInitialLoadRef.current = true;
         knownIdsRef.current = new Set();
@@ -82,12 +121,15 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   useEffect(() => {
     if (!currentUid) {
       setNotifications([]);
+      setLoading(false);
       return;
     }
 
+    setLoading(true);
+    setError(null);
     const q = query(
       collection(db, "notifications"),
-      where("targetUserId", "in", [currentUid, "all"])
+      where("targetUserId", "in", currentIsAdmin ? [currentUid, "all", "admins"] : [currentUid, "all"])
     );
 
     const unsub = onSnapshot(
@@ -132,8 +174,13 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         }
 
         setNotifications(items);
+        setLoading(false);
       },
-      (err) => console.warn("[NotificationContext] snapshot error:", err.code)
+      (err) => {
+        console.warn("[NotificationContext] snapshot error:", err.code);
+        setLoading(false);
+        setError("Could not load notifications from Firebase. Please try again later.");
+      }
     );
 
     return () => {
@@ -141,7 +188,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       isInitialLoadRef.current = true;
       knownIdsRef.current = new Set();
     };
-  }, [currentUid]);
+  }, [currentUid, currentIsAdmin]);
 
   function dismissArrival() {
     setLatestArrival(null);
@@ -208,6 +255,8 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       value={{
         notifications,
         unreadCount,
+          loading,
+          error,
         latestArrival,
         dismissArrival,
         addNotification,

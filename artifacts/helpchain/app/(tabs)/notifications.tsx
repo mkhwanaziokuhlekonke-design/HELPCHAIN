@@ -9,31 +9,30 @@ import {
   View,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppNotification, useNotifications } from "@/context/NotificationContext";
 import { useColors } from "@/hooks/useColors";
 
 const NOTIF_ICONS: Record<string, { icon: string; color: string }> = {
-  emergency_alert: { icon: "alert-triangle", color: "#DC2626" },
-  help_accepted: { icon: "check-circle", color: "#1B4FD8" },
-  help_offered: { icon: "heart", color: "#EA580C" },
-  completed: { icon: "check-circle", color: "#16A34A" },
+  emergency_alert: { icon: "alert-triangle", color: "#EF4444" },
+  help_accepted: { icon: "check-circle", color: "#2563EB" },
+  help_offered: { icon: "heart", color: "#EF4444" },
+  completed: { icon: "check-circle", color: "#10B981" },
+  community_update: { icon: "megaphone", color: "#2563EB" },
+  donation_registered: { icon: "gift", color: "#0D9488" },
+  new_donation: { icon: "gift", color: "#0D9488" },
   system: { icon: "info", color: "#64748B" },
 };
 
-function timeAgo(dateStr: string) {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
+function formatDateTime(dateStr: string) {
+  const date = new Date(dateStr);
+  return Number.isNaN(date.getTime()) ? "" : date.toLocaleString();
 }
 
 export default function NotificationsScreen() {
   const colors = useColors();
-  const { notifications, markAllRead, markRead, clearAll } = useNotifications();
+  const { notifications, loading, error, markAllRead, markRead } = useNotifications();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -45,30 +44,46 @@ export default function NotificationsScreen() {
     markRead(n.id);
     if (n.requestId) {
       router.push(`/request/${n.requestId}` as any);
+    } else if (n.type === "community_update") {
+      router.push("/community-updates" as any);
+    } else if (n.type === "donation_registered") {
+      router.push("/donation/my-donations" as any);
+    } else if (n.type === "new_donation" && n.donationId) {
+      router.push({
+        pathname: "/admin",
+        params: { section: "donations", donationId: n.donationId },
+      } as any);
     }
   }
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
-      <View style={[styles.header, { paddingTop: topPad, backgroundColor: colors.card, borderBottomColor: colors.border }]}>
-        <View>
-          <Text style={[styles.headerTitle, { color: colors.foreground }]}>Notifications</Text>
+      <LinearGradient colors={["#0F2747", "#2563EB", "#0D9488"]} style={[styles.header, { paddingTop: topPad + 12 }]}>
+        <View style={styles.headerCopy}>
+          <View style={styles.headerHeading}>
+            <View style={styles.headerIcon}>
+              <Feather name="bell" size={19} color="#FFFFFF" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.headerTitle}>Notifications</Text>
           {unread > 0 && (
-            <Text style={[styles.headerSub, { color: colors.mutedForeground }]}>{unread} unread</Text>
+                <Text style={styles.headerSub}>{unread} unread</Text>
           )}
+            </View>
+          </View>
         </View>
         {notifications.length > 0 && (
-          <Pressable onPress={markAllRead} style={[styles.markBtn, { backgroundColor: colors.secondary }]}>
-            <Text style={[styles.markText, { color: colors.primary }]}>Mark all read</Text>
+          <Pressable onPress={markAllRead} style={styles.markBtn}>
+            <Text style={styles.markText}>Mark all read</Text>
           </Pressable>
         )}
-      </View>
+      </LinearGradient>
 
       <FlatList
         data={notifications}
         keyExtractor={(n) => n.id}
-        contentContainerStyle={{ paddingBottom: bottomPad }}
-        scrollEnabled={!!notifications.length}
+        contentContainerStyle={[styles.listContent, { paddingBottom: bottomPad }]}
+        scrollEnabled={!loading && !error && !!notifications.length}
         renderItem={({ item }) => {
           const cfg = NOTIF_ICONS[item.type] ?? NOTIF_ICONS.system;
           return (
@@ -78,7 +93,7 @@ export default function NotificationsScreen() {
                 styles.notifItem,
                 {
                   backgroundColor: item.read ? colors.card : colors.secondary,
-                  borderBottomColor: colors.border,
+                  borderColor: colors.border,
                   opacity: pressed ? 0.9 : 1,
                 },
               ]}
@@ -94,12 +109,23 @@ export default function NotificationsScreen() {
                 <Text style={[styles.notifBody, { color: colors.mutedForeground }]} numberOfLines={2}>
                   {item.body}
                 </Text>
-                <Text style={[styles.notifTime, { color: colors.mutedForeground }]}>{timeAgo(item.createdAt)}</Text>
+                <Text style={[styles.notifTime, { color: colors.mutedForeground }]}>{formatDateTime(item.createdAt)}</Text>
               </View>
             </Pressable>
           );
         }}
         ListEmptyComponent={
+          loading ? (
+            <View style={styles.empty}>
+              <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>Loading notifications...</Text>
+            </View>
+          ) : error ? (
+            <View style={styles.empty}>
+              <Feather name="alert-circle" size={36} color="#EF4444" />
+              <Text style={[styles.emptyTitle, { color: colors.foreground }]}>Notifications unavailable</Text>
+              <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>{error}</Text>
+            </View>
+          ) : (
           <View style={styles.empty}>
             <Feather name="bell-off" size={40} color={colors.muted} />
             <Text style={[styles.emptyTitle, { color: colors.foreground }]}>No notifications</Text>
@@ -107,6 +133,7 @@ export default function NotificationsScreen() {
               You're all caught up! Notifications will appear here.
             </Text>
           </View>
+          )
         }
       />
     </View>
@@ -116,36 +143,54 @@ export default function NotificationsScreen() {
 const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-end",
     justifyContent: "space-between",
     paddingHorizontal: 20,
-    paddingBottom: 14,
-    borderBottomWidth: 1,
+    paddingBottom: 20,
+    gap: 12,
   },
+  headerCopy: { flex: 1 },
+  headerHeading: { flexDirection: "row", alignItems: "center", gap: 12 },
+  headerIcon: { width: 42, height: 42, borderRadius: 14, backgroundColor: "rgba(255,255,255,0.16)", alignItems: "center", justifyContent: "center" },
   headerTitle: {
-    fontSize: 22,
+    color: "#FFFFFF",
+    fontSize: 24,
     fontFamily: "Inter_700Bold",
   },
   headerSub: {
+    color: "rgba(255,255,255,0.76)",
     fontSize: 12,
     fontFamily: "Inter_400Regular",
     marginTop: 2,
   },
   markBtn: {
     paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 20,
+    minHeight: 36,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.16)",
   },
   markText: {
+    color: "#FFFFFF",
     fontSize: 12,
-    fontFamily: "Inter_500Medium",
+    fontFamily: "Inter_600SemiBold",
   },
+  listContent: { paddingTop: 12, gap: 10 },
   notifItem: {
     flexDirection: "row",
     gap: 14,
     padding: 16,
-    borderBottomWidth: 1,
+    marginHorizontal: 16,
+    borderWidth: 1,
+    borderRadius: 16,
     alignItems: "flex-start",
+    shadowColor: "#0B1F3A",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 1,
   },
   notifIcon: {
     width: 44,

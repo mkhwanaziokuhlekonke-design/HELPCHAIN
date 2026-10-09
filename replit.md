@@ -26,7 +26,7 @@ _Populate as you build — short repo map plus pointers to the source-of-truth f
 
 ## Architecture decisions
 
-- **Firebase Auth** — email/password sign-in. `ADMIN_EMAILS` list in `AuthContext.tsx` controls which emails get `isAdmin: true` on signup.
+- **Firebase Auth** — email/password sign-in. Admin access requires the authenticated user's `users/{uid}.isAdmin` Firestore field to be the Boolean `true`; provision roles through a trusted Firebase administrator or existing administrator account.
 - **Firestore collections**: `users`, `requests`, `donations`, `chat` — all with `onSnapshot` listeners for real-time updates. No AsyncStorage for app data.
 - **`getAuth(app)` (not `initializeAuth`)** — Firebase v12 removed `getReactNativePersistence` from the standard bundle. `getAuth` uses IndexedDB on web and in-memory on native. If native session persistence across restarts is needed later, add a custom persistence adapter.
 - **`EXPO_PUBLIC_` prefix required** — Expo's Metro bundler only inlines env vars prefixed with `EXPO_PUBLIC_` into the client bundle. Firebase config uses `EXPO_PUBLIC_FIREBASE_*` secrets.

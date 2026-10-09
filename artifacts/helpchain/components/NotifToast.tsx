@@ -14,11 +14,11 @@ import { useNotifications } from "@/context/NotificationContext";
 import { useColors } from "@/hooks/useColors";
 
 const NOTIF_META: Record<string, { icon: string; color: string }> = {
-  emergency_alert: { icon: "alert-triangle", color: "#DC2626" },
-  help_offered:    { icon: "heart",           color: "#EA580C" },
-  help_accepted:   { icon: "check-circle",    color: "#1B4FD8" },
-  completed:       { icon: "check-circle",    color: "#16A34A" },
-  new_request:     { icon: "life-buoy",       color: "#0F766E" },
+  emergency_alert: { icon: "alert-triangle", color: "#EF4444" },
+  help_offered:    { icon: "heart",           color: "#EF4444" },
+  help_accepted:   { icon: "check-circle",    color: "#2563EB" },
+  completed:       { icon: "check-circle",    color: "#10B981" },
+  new_request:     { icon: "life-buoy",       color: "#0D9488" },
   new_donation:    { icon: "gift",            color: "#7C3AED" },
   new_message:     { icon: "message-circle",  color: "#2563EB" },
   system:          { icon: "bell",            color: "#64748B" },

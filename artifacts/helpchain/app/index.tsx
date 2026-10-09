@@ -1,11 +1,10 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useEffect } from "react";
-import { ActivityIndicator, Image, Platform, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Platform, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
-
-const logo = require("@/assets/images/logo.jpeg");
+import { HelpChainLogo } from "@/components/HelpChainLogo";
 
 export default function SplashIndex() {
   const { user, loading } = useAuth();
@@ -16,7 +15,11 @@ export default function SplashIndex() {
     if (!loading) {
       const timer = setTimeout(() => {
         if (user) {
-          router.replace("/(tabs)" as any);
+          if (user.emailVerified === false) {
+            router.replace("/(auth)/verify-email" as any);
+          } else {
+            router.replace(user.isAdmin ? "/admin" as any : "/(tabs)" as any);
+          }
         } else {
           router.replace("/(auth)/portal" as any);
         }
@@ -28,10 +31,10 @@ export default function SplashIndex() {
   const topPad = Platform.OS === "web" ? 67 : insets.top;
 
   return (
-    <LinearGradient colors={["#1F2937", "#2563EB", "#0EA5E9"]} style={[styles.container, { paddingTop: topPad }]}>
+    <LinearGradient colors={["#0F2747", "#2563EB", "#2563EB"]} style={[styles.container, { paddingTop: topPad }]}>
       <View style={styles.content}>
         <View style={styles.logoWrapper}>
-          <Image source={logo} style={styles.logoImage} resizeMode="contain" />
+          <HelpChainLogo width={300} height={184} light />
         </View>
 
         <View style={styles.loader}>
@@ -39,9 +42,6 @@ export default function SplashIndex() {
         </View>
       </View>
 
-      <View style={[styles.footer, { paddingBottom: Platform.OS === "web" ? 34 : insets.bottom + 20 }]}>
-        <Text style={styles.footerText}>Powered by your community</Text>
-      </View>
     </LinearGradient>
   );
 }
@@ -58,25 +58,12 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   logoWrapper: {
-    width: 220,
-    height: 220,
+    width: 300,
+    height: 184,
     alignItems: "center",
     justifyContent: "center",
   },
-  logoImage: {
-    width: 220,
-    height: 220,
-    borderRadius: 40,
-  },
   loader: {
     marginTop: 24,
-  },
-  footer: {
-    alignItems: "center",
-  },
-  footerText: {
-    color: "rgba(255,255,255,0.4)",
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
   },
 });

@@ -20,7 +20,6 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
 import { HelpCategory, useHelp } from "@/context/HelpContext";
-import { useNotifications } from "@/context/NotificationContext";
 import { useColors } from "@/hooks/useColors";
 
 const CATEGORIES: { key: HelpCategory; label: string; icon: string }[] = [
@@ -31,12 +30,22 @@ const CATEGORIES: { key: HelpCategory; label: string; icon: string }[] = [
   { key: "daily", label: "Daily Task", icon: "tool" },
   { key: "other", label: "Other", icon: "help-circle" },
 ];
+const SUBMISSION_TIMEOUT_MS = 20000;
+
+function withSubmissionTimeout<T>(submission: Promise<T>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error("submission-timeout")), SUBMISSION_TIMEOUT_MS);
+    submission.then(
+      (value) => { clearTimeout(timeout); resolve(value); },
+      (error) => { clearTimeout(timeout); reject(error); }
+    );
+  });
+}
 
 export default function NewRequestScreen() {
   const colors = useColors();
   const { user } = useAuth();
   const { addRequest } = useHelp();
-  const { addNotification } = useNotifications();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ emergency?: string }>();
@@ -47,10 +56,16 @@ export default function NewRequestScreen() {
   const [isEmergency, setIsEmergency] = useState(params.emergency === "1");
   const [useLocation, setUseLocation] = useState(false);
 
-  // Sync category when emergency flag is set via URL param
+  // Emergency requests should default to the emergency category and immediately
+  // request/enable the user's location so the alert is visible and actionable.
   useEffect(() => {
-    if (params.emergency === "1") setCategory("emergency");
-  }, []);
+    if (params.emergency === "1") {
+      setCategory("emergency");
+      setIsEmergency(true);
+      setUseLocation(true);
+      void handleToggleLocation(true);
+    }
+  }, [params.emergency]);
   const [locationData, setLocationData] = useState<{ latitude: number; longitude: number; address?: string } | null>(null);
   const [loadingLocation, setLoadingLocation] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -104,7 +119,7 @@ export default function NewRequestScreen() {
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     try {
-      const req = await addRequest({
+      const req = await withSubmissionTimeout(addRequest({
         title: title.trim(),
         description: description.trim(),
         category: isEmergency ? "emergency" : category,
@@ -112,23 +127,15 @@ export default function NewRequestScreen() {
         requesterId: user.id,
         requesterName: user.name,
         location: locationData ?? undefined,
-      });
-
-      if (isEmergency) {
-        // Fire-and-forget — don't block navigation on notification write
-        addNotification({
-          title: "🚨 Emergency Alert",
-          body: `${user.name} needs urgent help: ${title.trim()}`,
-          type: "emergency_alert",
-          requestId: req.id,
-        }).catch(() => {});
-      }
+      }));
 
       router.back();
     } catch (e: any) {
       Alert.alert(
         "Failed to Post",
-        e?.message?.includes("permission")
+        e?.message === "submission-timeout"
+          ? "The request is taking longer than expected and may still be syncing. Check your requests before trying again."
+          : e?.message?.includes("permission")
           ? "Permission denied. Make sure Firestore rules are published in Firebase Console."
           : "Could not post your request. Please check your connection and try again."
       );
@@ -139,10 +146,10 @@ export default function NewRequestScreen() {
 
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.background }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-      <LinearGradient colors={["#1F2937", "#2563EB"]} style={[styles.header, { paddingTop: topPad }]}>
+      <LinearGradient colors={["#0F2747", "#2563EB"]} style={[styles.header, { paddingTop: topPad }]}>
         <View style={styles.headerRow}>
           <Pressable onPress={() => router.back()} style={styles.closeBtn}>
-            <Feather name="x" size={22} color="#fff" />
+            <Feather name="x" size={22} color="#FFFFFF" />
           </Pressable>
           <Text style={styles.headerTitle}>New Help Request</Text>
           <View style={{ width: 38 }} />
@@ -150,10 +157,10 @@ export default function NewRequestScreen() {
       </LinearGradient>
 
       <ScrollView contentContainerStyle={[styles.form, { paddingBottom: bottomPad }]} keyboardShouldPersistTaps="handled">
-        <View style={[styles.emergencyRow, { backgroundColor: isEmergency ? "#FEF2F2" : colors.secondary, borderColor: isEmergency ? colors.destructive : colors.border }]}>
+        <View style={[styles.emergencyRow, { backgroundColor: isEmergency ? "#F8FAFC" : colors.secondary, borderColor: isEmergency ? colors.destructive : colors.border }]}>
           <View style={styles.emergencyLeft}>
             <View style={[styles.emergencyIcon, { backgroundColor: isEmergency ? colors.destructive : colors.muted }]}>
-              <Feather name="alert-triangle" size={18} color={isEmergency ? "#fff" : colors.mutedForeground} />
+              <Feather name="alert-triangle" size={18} color={isEmergency ? "#FFFFFF" : colors.mutedForeground} />
             </View>
             <View>
               <Text style={[styles.emergencyLabel, { color: isEmergency ? colors.destructive : colors.foreground }]}>Emergency</Text>
@@ -164,10 +171,14 @@ export default function NewRequestScreen() {
             value={isEmergency}
             onValueChange={(v) => {
               setIsEmergency(v);
-              if (v) setCategory("emergency");
+              if (v) {
+                setCategory("emergency");
+                setUseLocation(true);
+                void handleToggleLocation(true);
+              }
             }}
             trackColor={{ true: colors.destructive, false: colors.muted }}
-            thumbColor="#fff"
+            thumbColor="#FFFFFF"
           />
         </View>
 
@@ -242,7 +253,7 @@ export default function NewRequestScreen() {
             value={useLocation}
             onValueChange={handleToggleLocation}
             trackColor={{ true: colors.primary, false: colors.muted }}
-            thumbColor="#fff"
+            thumbColor="#FFFFFF"
           />
         </View>
 
@@ -255,10 +266,10 @@ export default function NewRequestScreen() {
           ]}
         >
           {submitting ? (
-            <ActivityIndicator color="#fff" />
+            <ActivityIndicator color="#FFFFFF" />
           ) : (
             <>
-              <Feather name={isEmergency ? "alert-triangle" : "send"} size={18} color="#fff" />
+              <Feather name={isEmergency ? "alert-triangle" : "send"} size={18} color="#FFFFFF" />
               <Text style={styles.submitText}>{isEmergency ? "Post Emergency Request" : "Post Help Request"}</Text>
             </>
           )}
@@ -288,7 +299,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 17,
     fontFamily: "Inter_600SemiBold",
-    color: "#fff",
+    color: "#FFFFFF",
   },
   form: {
     padding: 16,
@@ -404,7 +415,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   submitText: {
-    color: "#fff",
+    color: "#FFFFFF",
     fontSize: 16,
     fontFamily: "Inter_600SemiBold",
   },

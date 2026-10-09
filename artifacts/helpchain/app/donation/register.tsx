@@ -1,0 +1,1 @@
+export { DonationRegistrationScreen as default } from "../donation";

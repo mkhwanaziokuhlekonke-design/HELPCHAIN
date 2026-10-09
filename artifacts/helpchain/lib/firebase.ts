@@ -1,9 +1,13 @@
 import { getApp, getApps, initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
+import { FirebaseError } from "firebase/app";
+import { getAuth, initializeAuth } from "firebase/auth";
+// @ts-expect-error Firebase exposes this persistence helper from its React Native entry point only.
+import { getReactNativePersistence } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Platform } from "react-native";
 
-// Strip surrounding quotes/spaces that get accidentally included when
-// pasting values into Replit Secrets (e.g. "hopeproject-47613c16" → hopeproject-47613c16)
+// Strip surrounding quotes or spaces accidentally included when pasting env values.
 function clean(val: string | undefined): string {
   return (val ?? "").replace(/^["'\s]+|["'\s]+$/g, "");
 }
@@ -17,10 +21,44 @@ const firebaseConfig = {
   appId:             clean(process.env.EXPO_PUBLIC_FIREBASE_APP_ID),
 };
 
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+const hasFirebaseConfig = Object.values(firebaseConfig).every((value) => String(value).length > 0);
 
-// getAuth uses the best available persistence for the current platform:
-// - web: IndexedDB / localStorage (survives page refresh)
-// - native (Expo Go): in-memory (session lasts until app closes)
-export const auth = getAuth(app);
-export const db   = getFirestore(app);
+if (!hasFirebaseConfig) {
+  console.warn(
+    "Firebase config is missing. Add EXPO_PUBLIC_FIREBASE_* values to a .env file before starting the app."
+  );
+}
+
+const app = hasFirebaseConfig
+  ? getApps().some((candidate) => candidate.name === "[DEFAULT]")
+    ? getApp()
+    : initializeApp(firebaseConfig)
+  : null;
+
+if (app && app.options.projectId !== firebaseConfig.projectId) {
+  throw new Error(
+    `Firebase app project mismatch: expected ${firebaseConfig.projectId}, received ${app.options.projectId ?? "unknown"}. Restart the app after updating Firebase configuration.`
+  );
+}
+
+function createAuth() {
+  if (!app) return undefined;
+  if (Platform.OS === "web") return getAuth(app);
+
+  try {
+    return initializeAuth(app, {
+      persistence: getReactNativePersistence(AsyncStorage),
+    });
+  } catch (error) {
+    if (
+      error instanceof FirebaseError
+      && error.code === "auth/already-initialized"
+    ) {
+      return getAuth(app);
+    }
+    throw error;
+  }
+}
+
+export const auth = createAuth() as ReturnType<typeof getAuth>;
+export const db = app ? getFirestore(app) : (undefined as any);

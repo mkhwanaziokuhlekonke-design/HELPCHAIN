@@ -61,7 +61,7 @@ export default function RequestsScreen() {
           onPress={() => router.push("/request/new" as any)}
           style={[styles.newBtn, { backgroundColor: colors.primary }]}
         >
-          <Feather name="plus" size={18} color="#fff" />
+          <Feather name="plus" size={18} color="#FFFFFF" />
         </Pressable>
       </View>
 
@@ -84,12 +84,12 @@ export default function RequestsScreen() {
               ]}
             >
               {item.key === "emergency" && (
-                <Feather name="alert-triangle" size={11} color={filter === item.key ? "#fff" : colors.emergency} />
+                <Feather name="alert-triangle" size={11} color={filter === item.key ? "#FFFFFF" : colors.emergency} />
               )}
               <Text
                 style={[
                   styles.filterText,
-                  { color: filter === item.key ? "#fff" : colors.mutedForeground },
+                  { color: filter === item.key ? "#FFFFFF" : colors.mutedForeground },
                 ]}
               >
                 {item.label}

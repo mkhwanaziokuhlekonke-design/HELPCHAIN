@@ -23,10 +23,10 @@ function timeAgo(dateStr: string) {
 }
 
 const STATUS_CONFIG = {
-  open: { label: "Open", color: "#16A34A", bg: "#F0FDF4" },
-  accepted: { label: "Accepted", color: "#1B4FD8", bg: "#EFF6FF" },
-  completed: { label: "Completed", color: "#64748B", bg: "#F1F5F9" },
-  cancelled: { label: "Cancelled", color: "#DC2626", bg: "#FEF2F2" },
+  open: { label: "Open", color: "#10B981", bg: "#ECFDF5" },
+  accepted: { label: "Accepted", color: "#2563EB", bg: "#EFF6FF" },
+  completed: { label: "Completed", color: "#64748B", bg: "#F8FAFC" },
+  cancelled: { label: "Cancelled", color: "#EF4444", bg: "#F8FAFC" },
 };
 
 export function HelpRequestCard({ request, compact = false }: HelpRequestCardProps) {
@@ -45,7 +45,7 @@ export function HelpRequestCard({ request, compact = false }: HelpRequestCardPro
           borderColor: request.isEmergency ? colors.emergency + "40" : colors.border,
           borderWidth: request.isEmergency ? 1.5 : 1,
           opacity: pressed ? 0.92 : 1,
-          shadowColor: "#000",
+          shadowColor: "#0B1F3A",
           shadowOffset: { width: 0, height: 2 },
           shadowOpacity: isWeb ? 0 : 0.06,
           shadowRadius: 8,
@@ -55,7 +55,7 @@ export function HelpRequestCard({ request, compact = false }: HelpRequestCardPro
     >
       {request.isEmergency && (
         <View style={[styles.emergencyStrip, { backgroundColor: colors.emergency }]}>
-          <Feather name="alert-triangle" size={10} color="#fff" />
+          <Feather name="alert-triangle" size={10} color="#FFFFFF" />
           <Text style={styles.emergencyText}>EMERGENCY</Text>
         </View>
       )}
@@ -117,7 +117,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   emergencyText: {
-    color: "#fff",
+    color: "#FFFFFF",
     fontSize: 10,
     fontFamily: "Inter_700Bold",
     letterSpacing: 0.8,

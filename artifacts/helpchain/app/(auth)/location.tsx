@@ -60,7 +60,7 @@ export default function LocationScreen() {
         end={{ x: 1, y: 1 }}
         style={styles.iconContainer}
       >
-        <Feather name="map-pin" size={60} color="#fff" />
+        <Feather name="map-pin" size={60} color="#FFFFFF" />
       </LinearGradient>
 
       <View style={styles.textContent}>
@@ -92,10 +92,10 @@ export default function LocationScreen() {
           style={({ pressed }) => [styles.allowBtn, { backgroundColor: colors.primary, opacity: pressed || loading ? 0.85 : 1 }]}
         >
           {loading ? (
-            <ActivityIndicator color="#fff" />
+            <ActivityIndicator color="#FFFFFF" />
           ) : (
             <>
-              <Feather name="map-pin" size={18} color="#fff" />
+              <Feather name="map-pin" size={18} color="#FFFFFF" />
               <Text style={styles.allowText}>Allow Location Access</Text>
             </>
           )}
@@ -177,7 +177,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   allowText: {
-    color: "#fff",
+    color: "#FFFFFF",
     fontSize: 16,
     fontFamily: "Inter_600SemiBold",
   },

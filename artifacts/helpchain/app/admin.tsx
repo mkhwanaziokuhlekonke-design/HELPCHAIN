@@ -1,5 +1,6 @@
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
+import * as ImagePicker from "expo-image-picker";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -7,6 +8,7 @@ import {
   Animated,
   FlatList,
   Image,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -21,28 +23,50 @@ import { Feather } from "@expo/vector-icons";
 import Svg, { Circle, Path, Polyline, Line as SvgLine, Text as SvgText, G } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
-import { useChat } from "@/context/ChatContext";
 import { useDonations } from "@/context/DonationContext";
+import { DEFAULT_DONATION_INSTRUCTIONS, useDonationInformation } from "@/context/DonationInformationContext";
 import { useEmergencyAlerts } from "@/context/EmergencyAlertContext";
+import { AppNotification, useNotifications } from "@/context/NotificationContext";
 import { useHelp } from "@/context/HelpContext";
+import { MAX_ANNOUNCEMENT_IMAGE_LENGTH, useAnnouncements } from "@/context/AnnouncementContext";
+import { useCommunityCentres } from "@/context/CommunityCentreContext";
+import { useReports } from "@/context/ReportContext";
+import { useOrganisations } from "@/context/OrganisationContext";
 import { useLocation } from "@/context/LocationContext";
 import { AdminActivityMap } from "@/components/AdminActivityMap";
-
-const logo = require("@/assets/images/logo.jpeg");
+import { AdminUserActivityFeed } from "@/components/AdminUserActivityFeed";
+import { DonationManagementPanel } from "@/components/DonationManagementPanel";
+import { HelpChainLogo } from "@/components/HelpChainLogo";
 
 const DRAWER_WIDTH = 240;
-const BLUE_DARK = "#1E3A8A";
-const BLUE_MID = "#1D4ED8";
+const BLUE_DARK = "#0F2747";
+const BLUE_MID = "#2563EB";
 const BLUE_LIGHT = "#2563EB";
-const BG = "#F1F5F9";
+const BG = "#F8FAFC";
 const CARD = "#FFFFFF";
+const ANNOUNCEMENT_SUBMISSION_TIMEOUT_MS = 20_000;
+
+function withAnnouncementSubmissionTimeout<T>(submission: Promise<T>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(
+      () => reject(new Error("announcement-submission-timeout")),
+      ANNOUNCEMENT_SUBMISSION_TIMEOUT_MS
+    );
+    submission.then(
+      (value) => { clearTimeout(timeout); resolve(value); },
+      (error) => { clearTimeout(timeout); reject(error); }
+    );
+  });
+}
 
 type Section =
   | "dashboard"
+  | "updates"
+  | "organisations"
+  | "centres"
   | "users"
   | "requests"
   | "donations"
-  | "chat"
   | "reports"
   | "location"
   | "analytics"
@@ -50,36 +74,16 @@ type Section =
 
 const NAV_ITEMS: { key: Section; label: string; icon: string }[] = [
   { key: "dashboard", label: "Dashboard", icon: "grid" },
+  { key: "updates", label: "Community Updates", icon: "megaphone" },
+  { key: "organisations", label: "Verified Organisations", icon: "shield-check" },
+  { key: "centres", label: "Community Centres", icon: "map-pin" },
   { key: "users", label: "Users", icon: "users" },
   { key: "requests", label: "Requests", icon: "list" },
-  { key: "donations", label: "Donations", icon: "dollar-sign" },
-  { key: "chat", label: "Community Chat", icon: "message-circle" },
+  { key: "donations", label: "Donations", icon: "gift" },
   { key: "reports", label: "Reports & Complaints", icon: "flag" },
   { key: "location", label: "Location Monitoring", icon: "map-pin" },
   { key: "analytics", label: "Analytics", icon: "bar-chart-2" },
   { key: "settings", label: "Settings", icon: "settings" },
-];
-
-const CHART_POINTS = {
-  requests: [200, 350, 480, 600, 780, 900, 1000],
-  donations: [80, 180, 300, 410, 540, 660, 760],
-  users: [50, 140, 240, 350, 460, 540, 600],
-  labels: ["May 1", "May 6", "May 11", "May 16", "May 21", "May 26", "May 31"],
-};
-
-const PENDING_REPORTS = [
-  { id: "rep1", title: "Inappropriate Content", desc: "Reported in General Chat", time: "10 min ago", color: "#EF4444" },
-  { id: "rep2", title: "Spam User", desc: "User: john_doe123", time: "25 min ago", color: "#EF4444" },
-  { id: "rep3", title: "Harassment", desc: "Reported in Food Support", time: "45 min ago", color: "#F59E0B" },
-  { id: "rep4", title: "Fake Request", desc: "Request ID: REQ12345", time: "1 hr ago", color: "#F59E0B" },
-];
-
-const SYSTEM_SUMMARY = [
-  { label: "Total Categories", val: "24" },
-  { label: "Verified Volunteers", val: "1,256" },
-  { label: "Messages (This Month)", val: "8,745" },
-  { label: "App Version", val: "1.2.3" },
-  { label: "Total Downloads", val: "25,680" },
 ];
 
 function timeAgo(iso: string): string {
@@ -96,7 +100,7 @@ function getStatusColor(status: string): string {
   if (status === "open") return "#10B981";
   if (status === "accepted") return "#F59E0B";
   if (status === "completed") return "#14B8A6";
-  return "#9CA3AF";
+  return "#64748B";
 }
 function getStatusLabel(status: string): string {
   if (status === "open") return "New";
@@ -118,15 +122,37 @@ function buildPath(data: number[], w: number, h: number, maxY: number): string {
   return d;
 }
 
-function LineChart({ width }: { width: number }) {
+function LineChart({
+  width,
+  requests,
+  donations,
+  users,
+}: {
+  width: number;
+  requests: { createdAt: string }[];
+  donations: { createdAt: string }[];
+  users: { createdAt: string }[];
+}) {
   const H = 160;
   const W = width - 40;
-  const maxY = 1200;
-  const rPath = buildPath(CHART_POINTS.requests, W, H, maxY);
-  const dPath = buildPath(CHART_POINTS.donations, W, H, maxY);
-  const uPath = buildPath(CHART_POINTS.users, W, H, maxY);
-
-  const yLabels = [0, 400, 800, 1200];
+  const days = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date();
+    date.setDate(date.getDate() - (6 - index));
+    return date;
+  });
+  const countsByDay = (records: { createdAt: string }[]) =>
+    days.map((day) => records.filter((record) => {
+      const createdAt = new Date(record.createdAt);
+      return !Number.isNaN(createdAt.getTime()) && createdAt.toDateString() === day.toDateString();
+    }).length);
+  const requestCounts = countsByDay(requests);
+  const donationCounts = countsByDay(donations);
+  const userCounts = countsByDay(users);
+  const maxY = Math.max(1, ...requestCounts, ...donationCounts, ...userCounts);
+  const rPath = buildPath(requestCounts, W, H, maxY);
+  const dPath = buildPath(donationCounts, W, H, maxY);
+  const uPath = buildPath(userCounts, W, H, maxY);
+  const yLabels = [...new Set([0, Math.ceil(maxY / 2), maxY])];
 
   return (
     <View style={{ paddingLeft: 8, paddingRight: 4 }}>
@@ -135,56 +161,56 @@ function LineChart({ width }: { width: number }) {
           const y = H - (val / maxY) * (H - 20) + 2;
           return (
             <G key={val}>
-              <SvgLine x1={0} y1={y} x2={W} y2={y} stroke="#E2E8F0" strokeWidth={1} />
-              <SvgText x={-2} y={y + 4} fontSize={9} fill="#94A3B8" textAnchor="end">{val === 0 ? "0" : val >= 1000 ? `${val / 1000}k` : val}</SvgText>
+              <SvgLine x1={0} y1={y} x2={W} y2={y} stroke="#DBEAFE" strokeWidth={1} />
+              <SvgText x={-2} y={y + 4} fontSize={9} fill="#64748B" textAnchor="end">{val === 0 ? "0" : val >= 1000 ? `${val / 1000}k` : val}</SvgText>
             </G>
           );
         })}
-        <Path d={rPath} fill="none" stroke="#3B82F6" strokeWidth={2} />
+        <Path d={rPath} fill="none" stroke="#2563EB" strokeWidth={2} />
         <Path d={dPath} fill="none" stroke="#14B8A6" strokeWidth={2} />
-        <Path d={uPath} fill="none" stroke="#A78BFA" strokeWidth={2} />
-        {CHART_POINTS.requests.map((v, i) => (
+        <Path d={uPath} fill="none" stroke="#7C3AED" strokeWidth={2} />
+        {requestCounts.map((v, i) => (
           <Circle
             key={`r${i}`}
-            cx={(i / (CHART_POINTS.requests.length - 1)) * W}
+            cx={(i / (requestCounts.length - 1)) * W}
             cy={H - (v / maxY) * (H - 20)}
             r={3}
-            fill="#3B82F6"
+            fill="#2563EB"
           />
         ))}
-        {CHART_POINTS.donations.map((v, i) => (
+        {donationCounts.map((v, i) => (
           <Circle
             key={`d${i}`}
-            cx={(i / (CHART_POINTS.donations.length - 1)) * W}
+            cx={(i / (donationCounts.length - 1)) * W}
             cy={H - (v / maxY) * (H - 20)}
             r={3}
             fill="#14B8A6"
           />
         ))}
-        {CHART_POINTS.users.map((v, i) => (
+        {userCounts.map((v, i) => (
           <Circle
             key={`u${i}`}
-            cx={(i / (CHART_POINTS.users.length - 1)) * W}
+            cx={(i / (userCounts.length - 1)) * W}
             cy={H - (v / maxY) * (H - 20)}
             r={3}
-            fill="#A78BFA"
+            fill="#7C3AED"
           />
         ))}
-        {CHART_POINTS.labels.filter((_, i) => i % 2 === 0).map((label, idx) => {
+        {days.filter((_, i) => i % 2 === 0).map((day, idx) => {
           const actualIdx = idx * 2;
-          const x = (actualIdx / (CHART_POINTS.labels.length - 1)) * W;
+          const x = (actualIdx / (days.length - 1)) * W;
           return (
-            <SvgText key={label} x={x} y={H + 18} fontSize={8} fill="#94A3B8" textAnchor="middle">
-              {label.replace("May ", "")}
+            <SvgText key={day.toISOString()} x={x} y={H + 18} fontSize={8} fill="#64748B" textAnchor="middle">
+              {day.toLocaleDateString([], { weekday: "short" })}
             </SvgText>
           );
         })}
       </Svg>
       <View style={{ flexDirection: "row", gap: 16, marginTop: 6, paddingLeft: 8 }}>
         {[
-          { color: "#3B82F6", label: "Requests" },
+          { color: "#2563EB", label: "Requests" },
           { color: "#14B8A6", label: "Donations" },
-          { color: "#A78BFA", label: "Users" },
+          { color: "#7C3AED", label: "Users" },
         ].map((s) => (
           <View key={s.label} style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
             <View style={{ width: 20, height: 3, backgroundColor: s.color, borderRadius: 2 }} />
@@ -209,28 +235,87 @@ function AdminMapView() {
   }
   return (
     <View style={{ height: 180, backgroundColor: "#DBEAFE", borderRadius: 8, alignItems: "center", justifyContent: "center", gap: 8 }}>
-      <Feather name="map" size={36} color="#3B82F6" />
-      <Text style={{ color: "#1D4ED8", fontSize: 13, fontFamily: "Inter_600SemiBold" }}>Live Activity Map</Text>
+      <Feather name="map" size={36} color="#2563EB" />
+      <Text style={{ color: "#2563EB", fontSize: 13, fontFamily: "Inter_600SemiBold" }}>Live Activity Map</Text>
       <Text style={{ color: "#64748B", fontSize: 11, fontFamily: "Inter_400Regular" }}>Showing real-time requests & volunteers</Text>
+    </View>
+  );
+}
+
+function AnnouncementImageControl({
+  imageUrl,
+  onPick,
+  onRemove,
+}: {
+  imageUrl: string | null;
+  onPick: () => void;
+  onRemove: () => void;
+}) {
+  return (
+    <View style={{ gap: 8 }}>
+      <Pressable
+        onPress={onPick}
+        accessibilityRole="button"
+        style={{ minHeight: 42, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderWidth: 1, borderColor: "#DBEAFE", borderStyle: "dashed", borderRadius: 8, paddingHorizontal: 12 }}
+      >
+        <Feather name="image" size={16} color={BLUE_LIGHT} />
+        <Text style={{ color: BLUE_LIGHT, fontSize: 12, fontFamily: "Inter_600SemiBold" }}>
+          {imageUrl ? "Change donated-goods photo" : "Add donated-goods photo"}
+        </Text>
+      </Pressable>
+      {imageUrl ? (
+        <View style={{ position: "relative" }}>
+          <Image source={{ uri: imageUrl }} style={{ width: "100%", height: 180, borderRadius: 8, backgroundColor: "#F8FAFC" }} resizeMode="cover" />
+          <Pressable
+            onPress={onRemove}
+            accessibilityRole="button"
+            accessibilityLabel="Remove update photo"
+            style={{ position: "absolute", top: 8, right: 8, width: 32, height: 32, borderRadius: 16, backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center" }}
+          >
+            <Feather name="x" size={16} color="#64748B" />
+          </Pressable>
+        </View>
+      ) : null}
     </View>
   );
 }
 
 export default function AdminScreen() {
   const router = useRouter();
+  const routeParams = useLocalSearchParams<{ section?: string; donationId?: string }>();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const { user, allUsers, loading, logout, toggleAdminRole, suspendUser, deleteUserFromFirestore } = useAuth();
-  const { requests } = useHelp();
-  const { donations, totalItems } = useDonations();
-  const { messages } = useChat();
+  const { user, allUsers, allUsersLoading, allUsersError, loading, logout, toggleAdminRole, suspendUser, deleteUserFromFirestore } = useAuth();
+  const { requests, loading: requestsLoading } = useHelp();
+  const { donations, totalItems, loading: donationsLoading, error: donationsError, authorizeCentreReceiver } = useDonations();
+  const { instructions: savedDonationInstructions, loading: donationInfoLoading, saveInstructions } = useDonationInformation();
+  const { announcements, loading: announcementsLoading, error: announcementsError, createAnnouncement, updateAnnouncement, deleteAnnouncement } = useAnnouncements();
+  const { organisations, createOrganisation, updateOrganisation, deleteOrganisation } = useOrganisations();
+  const { centres, loading: centresLoading, createCentre, updateCentre, deleteCentre } = useCommunityCentres();
+  const { reports, loading: reportsLoading, resolveReport } = useReports();
   const { userLocations } = useLocation();
   const { emergencyAlerts } = useEmergencyAlerts();
+  const { notifications, unreadCount, markRead } = useNotifications();
 
   const [section, setSection] = useState<Section>("dashboard");
+  const [selectedDonationId, setSelectedDonationId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [systemSummaryVisible, setSystemSummaryVisible] = useState(false);
   const [now, setNow] = useState(new Date());
   const [userSearch, setUserSearch] = useState("");
+  const [announcementTitle, setAnnouncementTitle] = useState("");
+  const [announcementBody, setAnnouncementBody] = useState("");
+  const [announcementImage, setAnnouncementImage] = useState<string | null>(null);
+  const [announcementCategory, setAnnouncementCategory] = useState<"general" | "update" | "event" | "emergency">("general");
+  const [editingAnnouncementId, setEditingAnnouncementId] = useState<string | null>(null);
+  const [postingAnnouncement, setPostingAnnouncement] = useState(false);
+  const [announcementActionError, setAnnouncementActionError] = useState<string | null>(null);
+  const [orgForm, setOrgForm] = useState({ name: "", type: "Police station", location: "", contact: "", description: "" });
+  const [editingOrgId, setEditingOrgId] = useState<string | null>(null);
+  const [centreForm, setCentreForm] = useState({ name: "", address: "", contact: "", openingHours: "", description: "" });
+  const [editingCentreId, setEditingCentreId] = useState<string | null>(null);
+  const [donationInstructions, setDonationInstructions] = useState(DEFAULT_DONATION_INSTRUCTIONS);
+  const [savingDonationInstructions, setSavingDonationInstructions] = useState(false);
   const drawerX = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
   const overlayOpacity = useRef(new Animated.Value(0)).current;
 
@@ -239,15 +324,24 @@ export default function AdminScreen() {
     if (loading) return;
     if (!user) {
       router.replace("/(auth)/portal" as any);
-    } else if (!user.isAdmin) {
-      router.replace("/(tabs)" as any);
     }
   }, [user, loading]);
+
+  useEffect(() => {
+    if (routeParams.section === "donations" || routeParams.section === "updates") {
+      setSection(routeParams.section);
+    }
+    if (routeParams.donationId) setSelectedDonationId(routeParams.donationId);
+  }, [routeParams.section, routeParams.donationId]);
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 60000);
     return () => clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    if (savedDonationInstructions) setDonationInstructions(savedDonationInstructions);
+  }, [savedDonationInstructions]);
 
   const openDrawer = useCallback(() => {
     setDrawerOpen(true);
@@ -284,7 +378,7 @@ export default function AdminScreen() {
     return (
       <View style={{ flex: 1, backgroundColor: BG, alignItems: "center", justifyContent: "center", gap: 12, padding: 32 }}>
         <Feather name="shield-off" size={48} color="#EF4444" />
-        <Text style={{ fontSize: 20, fontFamily: "Inter_700Bold", color: "#1E293B", textAlign: "center" }}>
+        <Text style={{ fontSize: 20, fontFamily: "Inter_700Bold", color: "#1E3A5F", textAlign: "center" }}>
           Access Denied
         </Text>
         <Text style={{ fontSize: 14, fontFamily: "Inter_400Regular", color: "#64748B", textAlign: "center" }}>
@@ -294,7 +388,7 @@ export default function AdminScreen() {
           onPress={() => router.replace("/(tabs)" as any)}
           style={{ backgroundColor: BLUE_LIGHT, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12, marginTop: 8 }}
         >
-          <Text style={{ color: "#fff", fontFamily: "Inter_600SemiBold", fontSize: 15 }}>Go Back</Text>
+          <Text style={{ color: "#FFFFFF", fontFamily: "Inter_600SemiBold", fontSize: 15 }}>Go Back</Text>
         </Pressable>
       </View>
     );
@@ -302,20 +396,252 @@ export default function AdminScreen() {
 
   const topPad = Platform.OS === "web" ? 56 : insets.top;
 
-  const activeRequests = requests.filter((r) => r.status === "open").length;
+  const activeRequests = requests.filter((r) => r.status === "open" || r.status === "accepted").length;
   const completedRequests = requests.filter((r) => r.status === "completed").length;
+  const selectedDonation = donations.find((donation) => donation.id === selectedDonationId || donation.donationId === selectedDonationId);
+  const pendingReports = reports.filter((report) => report.status === "pending");
+  const userCountValue = allUsersLoading ? "..." : allUsersError ? "N/A" : String(allUsers.length);
+  const systemSummary = [
+    { label: "Registered Users", val: userCountValue },
+    { label: "Authorised Admins", val: String(allUsers.filter((u) => u.isAdmin).length) },
+    { label: "Total Help Requests", val: String(requests.length) },
+    { label: "Active Help Requests", val: String(requests.filter((r) => r.status === "open" || r.status === "accepted").length) },
+    { label: "Donation Contributions", val: String(donations.length) },
+    { label: "Items Donated", val: String(totalItems) },
+    { label: "Registered Community Centres", val: String(centres.length) },
+    { label: "Official Updates", val: String(announcements.length) },
+  ];
 
   const STATS = [
-    { label: "Total Users", val: allUsers.length.toString(), icon: "user", iconBg: "#3B82F6", iconFg: "#fff", trend: "+12.5%", up: true },
-    { label: "Active Requests", val: activeRequests.toString(), icon: "activity", iconBg: "#10B981", iconFg: "#fff", trend: "+8.3%", up: true },
-    { label: "Completed", val: completedRequests.toString(), icon: "check-circle", iconBg: "#8B5CF6", iconFg: "#fff", trend: "+15.7%", up: true },
-    { label: "Items Donated", val: totalItems.toString(), icon: "gift", iconBg: "#F59E0B", iconFg: "#fff", trend: "+10.2%", up: true },
-    { label: "Community Groups", val: "86", icon: "users", iconBg: "#EC4899", iconFg: "#fff", trend: "+6.4%", up: true },
-    { label: "Pending Reports", val: PENDING_REPORTS.length.toString(), icon: "alert-circle", iconBg: "#EF4444", iconFg: "#fff", trend: "3.2%", up: false },
+    { label: "Total Users", val: userCountValue, icon: "user", iconBg: "#2563EB", iconFg: "#FFFFFF" },
+    { label: "Active Requests", val: requestsLoading ? "..." : activeRequests.toString(), icon: "activity", iconBg: "#10B981", iconFg: "#FFFFFF" },
+    { label: "Completed", val: requestsLoading ? "..." : completedRequests.toString(), icon: "check-circle", iconBg: "#7C3AED", iconFg: "#FFFFFF" },
+    { label: "Items Donated", val: donationsLoading ? "..." : totalItems.toString(), icon: "gift", iconBg: "#F59E0B", iconFg: "#FFFFFF" },
+    { label: "Active Centres", val: centresLoading ? "..." : centres.length.toString(), icon: "map-pin", iconBg: "#7C3AED", iconFg: "#FFFFFF" },
+    { label: "Pending Reports", val: reportsLoading ? "..." : pendingReports.length.toString(), icon: "alert-circle", iconBg: "#EF4444", iconFg: "#FFFFFF" },
   ];
 
   const dateStr = now.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   const timeStr = now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+
+  async function handlePickAnnouncementImage() {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permission required", "Allow access to your photo library to attach an update image.");
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: "images",
+        allowsEditing: true,
+        quality: 0.35,
+        base64: true,
+      });
+      if (result.canceled || !result.assets[0]) return;
+
+      const asset = result.assets[0];
+      if (!asset.base64) {
+        Alert.alert("Image unavailable", "Could not read the selected image. Please choose another photo.");
+        return;
+      }
+      if (asset.base64.length > MAX_ANNOUNCEMENT_IMAGE_LENGTH) {
+        Alert.alert("Photo too large", "Choose a smaller or more tightly cropped photo.");
+        return;
+      }
+
+      setAnnouncementImage(`data:${asset.mimeType ?? "image/jpeg"};base64,${asset.base64}`);
+    } catch (error: any) {
+      Alert.alert("Image unavailable", error?.message ?? "Could not open the photo library.");
+    }
+  }
+
+  async function handleCreateAnnouncement() {
+    setAnnouncementActionError(null);
+    if (!announcementTitle.trim() || !announcementBody.trim()) {
+      setAnnouncementActionError("Add both a title and a message before posting.");
+      return;
+    }
+
+    try {
+      setPostingAnnouncement(true);
+      if (editingAnnouncementId) {
+        await withAnnouncementSubmissionTimeout(updateAnnouncement(editingAnnouncementId, {
+          title: announcementTitle.trim(),
+          body: announcementBody.trim(),
+          imageUrl: announcementImage,
+          category: announcementCategory,
+        }));
+        Alert.alert("Updated", "The community update has been revised.");
+      } else {
+        await withAnnouncementSubmissionTimeout(createAnnouncement({
+          title: announcementTitle.trim(),
+          body: announcementBody.trim(),
+          imageUrl: announcementImage ?? undefined,
+          category: announcementCategory,
+        }));
+        Alert.alert("Posted", "Your app update is now visible to users.");
+      }
+      setAnnouncementTitle("");
+      setAnnouncementBody("");
+      setAnnouncementImage(null);
+      setAnnouncementCategory("general");
+      setEditingAnnouncementId(null);
+    } catch (error: any) {
+      const code = typeof error?.code === "string" ? ` (${error.code})` : "";
+      const message = error?.message === "announcement-submission-timeout"
+        ? "The save timed out. Check the updates list before trying again."
+        : error?.message ?? "Unknown Firebase error.";
+      setAnnouncementActionError(`Could not save the update${code}: ${message}`);
+    } finally {
+      setPostingAnnouncement(false);
+    }
+  }
+
+  async function handleDeleteAnnouncement(id: string) {
+    Alert.alert("Delete update", "This official update will be removed from the app.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await deleteAnnouncement(id);
+          } catch (error: any) {
+            const code = typeof error?.code === "string" ? ` (${error.code})` : "";
+            setAnnouncementActionError(`Could not delete the update${code}: ${error?.message ?? "Unknown Firebase error."}`);
+          }
+        },
+      },
+    ]);
+  }
+
+  function resetAnnouncementForm() {
+    setAnnouncementTitle("");
+    setAnnouncementBody("");
+    setAnnouncementImage(null);
+    setAnnouncementCategory("general");
+    setEditingAnnouncementId(null);
+    setAnnouncementActionError(null);
+  }
+
+  function openAdminNotification(notification: AppNotification) {
+    void markRead(notification.id);
+    if (notification.donationId) {
+      setSelectedDonationId(notification.donationId);
+      setSection("donations");
+    } else if (notification.announcementId || notification.type === "community_update") {
+      setSection("updates");
+    } else if (notification.requestId) {
+      setSection("requests");
+    } else if (notification.type === "new_message") {
+      router.push("/(tabs)/chat" as any);
+    } else {
+      router.push("/(tabs)/notifications" as any);
+    }
+  }
+
+  async function handleSaveOrganisation() {
+    if (!orgForm.name || !orgForm.type || !orgForm.location || !orgForm.contact || !orgForm.description) {
+      Alert.alert("Missing fields", "Complete every organisation field before saving.");
+      return;
+    }
+
+    try {
+      if (editingOrgId) {
+        await updateOrganisation(editingOrgId, orgForm);
+      } else {
+        await createOrganisation(orgForm);
+      }
+      setOrgForm({ name: "", type: "Police station", location: "", contact: "", description: "" });
+      setEditingOrgId(null);
+    } catch (error: any) {
+      Alert.alert("Save failed", error?.message ?? "Please try again.");
+    }
+  }
+
+  async function handleDeleteOrganisation(id: string) {
+    Alert.alert("Remove organisation", "This verified organisation will be removed.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await deleteOrganisation(id);
+          } catch (error: any) {
+            Alert.alert("Delete failed", error?.message ?? "Please try again.");
+          }
+        },
+      },
+    ]);
+  }
+
+  async function handleSaveCentre() {
+    if (!centreForm.name || !centreForm.address || !centreForm.contact || !centreForm.openingHours || !centreForm.description) {
+      Alert.alert("Missing fields", "Complete every centre detail before saving.");
+      return;
+    }
+
+    try {
+      if (editingCentreId) {
+        await updateCentre(editingCentreId, centreForm);
+      } else {
+        await createCentre(centreForm);
+      }
+      setCentreForm({ name: "", address: "", contact: "", openingHours: "", description: "" });
+      setEditingCentreId(null);
+    } catch (error: any) {
+      Alert.alert("Save failed", error?.message ?? "Please try again.");
+    }
+  }
+
+  async function handleDeleteCentre(id: string) {
+    Alert.alert("Remove centre", "This community centre will be removed from the safe donation list.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await deleteCentre(id);
+          } catch (error: any) {
+            Alert.alert("Delete failed", error?.message ?? "Please try again.");
+          }
+        },
+      },
+    ]);
+  }
+
+  async function handleSaveDonationInstructions() {
+    try {
+      setSavingDonationInstructions(true);
+      await saveInstructions(donationInstructions);
+      Alert.alert("Saved", "Donation information is now visible to users.");
+    } catch (error: any) {
+      Alert.alert("Save failed", error?.message ?? "Please try again.");
+    } finally {
+      setSavingDonationInstructions(false);
+    }
+  }
+
+  async function handleAdminLogout() {
+    try {
+      await logout();
+      router.replace("/(auth)/portal" as any);
+    } catch (error) {
+      console.error("[Admin] sign out failed:", error);
+      Alert.alert("Sign Out Failed", "Could not sign out. Please try again.");
+    }
+  }
+
+  async function handleResolveReport(reportId: string) {
+    try {
+      await resolveReport(reportId);
+    } catch {
+      Alert.alert("Could not update report", "Please check your connection and try again.");
+    }
+  }
 
   return (
     <View style={{ flex: 1, backgroundColor: BG }}>
@@ -323,21 +649,29 @@ export default function AdminScreen() {
       <View style={[styles.header, { paddingTop: topPad, backgroundColor: CARD }]}>
         <View style={styles.headerInner}>
           <Pressable onPress={openDrawer} style={styles.iconBtn}>
-            <Feather name="menu" size={22} color="#1E293B" />
+            <Feather name="menu" size={22} color="#1E3A5F" />
           </Pressable>
           <View style={{ flex: 1, marginLeft: 10 }}>
             <Text style={styles.headerTitle}>Admin Dashboard</Text>
             <Text style={styles.headerSub}>Welcome back, {user?.name ?? "Admin"}!</Text>
           </View>
           <View style={styles.headerRight}>
-            <Pressable style={styles.iconBtn}>
+            <Pressable
+              onPress={() => {
+                setSection("users");
+                setUserSearch("");
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Open user search"
+              style={styles.iconBtn}
+            >
               <Feather name="search" size={20} color="#64748B" />
             </Pressable>
-            <Pressable style={[styles.iconBtn, { position: "relative" }]}>
+            <Pressable onPress={() => router.push("/(tabs)/notifications" as any)} style={[styles.iconBtn, { position: "relative" }]}>
               <Feather name="bell" size={20} color="#64748B" />
-              <View style={styles.notifBadge}>
-                <Text style={styles.notifBadgeText}>3</Text>
-              </View>
+              {unreadCount > 0 && <View style={styles.notifBadge}>
+                <Text style={styles.notifBadgeText}>{unreadCount > 99 ? "99+" : unreadCount}</Text>
+              </View>}
             </Pressable>
             <View style={styles.dateBox}>
               <Feather name="calendar" size={12} color="#64748B" />
@@ -357,44 +691,173 @@ export default function AdminScreen() {
           contentContainerStyle={{ paddingHorizontal: 14, gap: 10 }}
         >
           {STATS.map((s) => (
-            <View key={s.label} style={[styles.statCard, { backgroundColor: CARD }]}>
+            <Pressable
+              key={s.label}
+              onPress={() => {
+                const target: Record<string, Section> = {
+                  "Total Users": "users",
+                  "Active Requests": "requests",
+                  Completed: "requests",
+                  "Items Donated": "donations",
+                  "Active Centres": "centres",
+                  "Pending Reports": "reports",
+                };
+                navTo(target[s.label]);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={`Open ${s.label}`}
+              style={({ pressed }) => [styles.statCard, { backgroundColor: CARD, opacity: pressed ? 0.82 : 1 }]}
+            >
               <View style={[styles.statIconCircle, { backgroundColor: s.iconBg }]}>
                 <Feather name={s.icon as any} size={18} color={s.iconFg} />
               </View>
               <Text style={styles.statVal}>{s.val}</Text>
               <Text style={styles.statLabel}>{s.label}</Text>
               <View style={styles.statTrend}>
-                <Feather
-                  name={s.up ? "trending-up" : "trending-down"}
-                  size={10}
-                  color={s.up ? "#10B981" : "#EF4444"}
-                />
-                <Text style={[styles.statTrendText, { color: s.up ? "#10B981" : "#EF4444" }]}>
-                  {s.trend} from last month
+                <Text style={[styles.statTrendText, { color: "#64748B" }]}>
+                  {s.label === "Total Users"
+                    ? allUsersLoading ? "Loading from Firebase" : allUsersError ? "Unavailable" : "Live from Firebase"
+                    : "Current total"}
                 </Text>
               </View>
-            </View>
+            </Pressable>
           ))}
         </ScrollView>
+          {!!allUsersError && (
+            <Text style={{ marginHorizontal: 16, marginTop: 8, color: "#EF4444", fontSize: 12, fontFamily: "Inter_500Medium" }}>
+              {allUsersError}
+            </Text>
+          )}
+          {!!donationsError && (
+            <Text accessibilityRole="alert" style={{ marginHorizontal: 16, marginTop: 8, color: "#EF4444", fontSize: 12, fontFamily: "Inter_500Medium" }}>
+              {donationsError}
+            </Text>
+          )}
 
         {section === "dashboard" && (
           <View style={{ padding: 14, gap: 14 }}>
-            {/* OVERVIEW CHART */}
-            <View style={[styles.card]}>
+            <View style={[styles.card, { gap: 12 }]}> 
               <View style={styles.cardHeader}>
-                <Text style={styles.cardTitle}>Overview <Text style={styles.cardTitleSub}>(This Month)</Text></Text>
-                <View style={styles.cardBadge}>
-                  <Text style={styles.cardBadgeText}>This Month</Text>
-                  <Feather name="chevron-down" size={12} color="#64748B" />
-                </View>
+                <Text style={styles.cardTitle}>Post to app</Text>
+                <Text style={styles.cardTitleSub}>{announcements.length} live</Text>
               </View>
-              <LineChart width={width - 28} />
+              {!!announcementActionError && <Text accessibilityRole="alert" style={{ color: "#EF4444", fontSize: 12, fontFamily: "Inter_500Medium" }}>{announcementActionError}</Text>}
+              {!!announcementsError && <Text accessibilityRole="alert" style={{ color: "#EF4444", fontSize: 12, fontFamily: "Inter_500Medium" }}>{announcementsError}</Text>}
+
+              <TextInput
+                value={announcementTitle}
+                onChangeText={setAnnouncementTitle}
+                placeholder="Announcement title"
+                placeholderTextColor="#64748B"
+                style={{
+                  borderWidth: 1,
+                  borderColor: "#DBEAFE",
+                  borderRadius: 10,
+                  paddingHorizontal: 12,
+                  paddingVertical: 10,
+                  fontSize: 13,
+                  color: "#1E3A5F",
+                  fontFamily: "Inter_500Medium",
+                  backgroundColor: "#F8FAFC",
+                }}
+              />
+
+              <TextInput
+                value={announcementBody}
+                onChangeText={setAnnouncementBody}
+                placeholder="Write the update or message for users..."
+                multiline
+                numberOfLines={4}
+                placeholderTextColor="#64748B"
+                style={{
+                  borderWidth: 1,
+                  borderColor: "#DBEAFE",
+                  borderRadius: 10,
+                  paddingHorizontal: 12,
+                  paddingVertical: 10,
+                  minHeight: 96,
+                  textAlignVertical: "top",
+                  fontSize: 13,
+                  color: "#1E3A5F",
+                  fontFamily: "Inter_400Regular",
+                  backgroundColor: "#F8FAFC",
+                }}
+              />
+
+              <AnnouncementImageControl
+                imageUrl={announcementImage}
+                onPick={handlePickAnnouncementImage}
+                onRemove={() => setAnnouncementImage(null)}
+              />
+
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                {(["general", "update", "event", "emergency"] as const).map((category) => (
+                  <Pressable
+                    key={category}
+                    onPress={() => setAnnouncementCategory(category)}
+                    style={{
+                      borderRadius: 999,
+                      paddingHorizontal: 10,
+                      paddingVertical: 6,
+                      backgroundColor: announcementCategory === category ? "#DBEAFE" : "#F8FAFC",
+                    }}
+                  >
+                    <Text style={{
+                      fontSize: 11,
+                      color: announcementCategory === category ? "#2563EB" : "#64748B",
+                      fontFamily: "Inter_600SemiBold",
+                      textTransform: "capitalize",
+                    }}>
+                      {category}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              <Pressable
+                onPress={handleCreateAnnouncement}
+                disabled={postingAnnouncement}
+                style={{
+                  backgroundColor: postingAnnouncement ? "#EFF6FF" : BLUE_LIGHT,
+                  borderRadius: 12,
+                  paddingVertical: 11,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Text style={{ color: "#FFFFFF", fontFamily: "Inter_700Bold", fontSize: 13 }}>
+                  {postingAnnouncement ? "Posting..." : "Post to app"}
+                </Text>
+              </Pressable>
             </View>
 
+            {/* OVERVIEW CHART */}
+            <Pressable
+            onPress={() => navTo("analytics")}
+            accessibilityRole="button"
+            accessibilityLabel="Open activity analytics"
+            style={({ pressed }) => [styles.card, { opacity: pressed ? 0.88 : 1 }]}
+            >
+            <View style={styles.cardHeader}>
+              <Text style={styles.cardTitle}>Activity <Text style={styles.cardTitleSub}>(Last 7 Days)</Text></Text>
+              <View style={styles.cardBadge}>
+                <Text style={styles.cardBadgeText}>Live data</Text>
+              </View>
+            </View>
+            <LineChart width={width - 28} requests={requests} donations={donations} users={allUsers} />
+            </Pressable>
+
             {/* LIVE MAP */}
-            <View style={[styles.card]}>
+            <View style={styles.card}>
               <View style={styles.cardHeader}>
-                <Text style={styles.cardTitle}>Live Activity Map</Text>
+                <Pressable
+                  onPress={() => navTo("location")}
+                  accessibilityRole="button"
+                  accessibilityLabel="Open location monitoring"
+                  style={{ flex: 1 }}
+                >
+                  <Text style={styles.cardTitle}>Live Activity Map</Text>
+                </Pressable>
                 <View style={styles.cardBadge}>
                   <Text style={styles.cardBadgeText}>All Activities</Text>
                   <Feather name="chevron-down" size={12} color="#64748B" />
@@ -403,9 +866,9 @@ export default function AdminScreen() {
               <AdminMapView />
               <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 10 }}>
                 {[
-                  { color: "#3B82F6", label: "Active Requests" },
+                  { color: "#2563EB", label: "Active Requests" },
                   { color: "#10B981", label: "Donations" },
-                  { color: "#8B5CF6", label: "Volunteers" },
+                  { color: "#7C3AED", label: "Volunteers" },
                   { color: "#F59E0B", label: "Community Groups" },
                 ].map((l) => (
                   <View key={l.label} style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
@@ -414,37 +877,6 @@ export default function AdminScreen() {
                   </View>
                 ))}
               </View>
-            </View>
-
-            {/* RECENT REQUESTS */}
-            <View style={styles.card}>
-              <View style={styles.cardHeader}>
-                <Text style={styles.cardTitle}>Recent Requests</Text>
-                <Pressable onPress={() => setSection("requests")}>
-                  <Text style={styles.viewAll}>View All</Text>
-                </Pressable>
-              </View>
-              {requests.slice(0, 4).map((req) => (
-                <View key={req.id} style={styles.requestRow}>
-                  <View style={styles.requestAvatar}>
-                    <Text style={styles.requestAvatarText}>{req.requesterName.charAt(0)}</Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.requestName} numberOfLines={1}>{req.title}</Text>
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 3, marginTop: 2 }}>
-                      <Feather name="map-pin" size={9} color="#94A3B8" />
-                      <Text style={styles.requestLoc} numberOfLines={1}>
-                        {req.location?.address ?? "Your City"}
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={[styles.statusPill, { backgroundColor: getStatusColor(req.status) + "20" }]}>
-                    <Text style={[styles.statusPillText, { color: getStatusColor(req.status) }]}>
-                      {getStatusLabel(req.status)}
-                    </Text>
-                  </View>
-                </View>
-              ))}
             </View>
 
             {/* RECENT DONATIONS */}
@@ -456,20 +888,55 @@ export default function AdminScreen() {
                 </Pressable>
               </View>
               {donations.slice(0, 4).map((d) => (
-                <View key={d.id} style={styles.donationRow}>
-                  <View style={[styles.donationIcon, { backgroundColor: "#FFFBEB" }]}>
+                <Pressable key={d.id} onPress={() => { setSelectedDonationId(d.id); setSection("donations"); }} style={styles.donationRow}>
+                  <View style={[styles.donationIcon, { backgroundColor: "#F8FAFC" }]}>
                     <Feather name="gift" size={16} color="#F59E0B" />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.donationTitle} numberOfLines={1}>{d.quantity}× {d.itemType}</Text>
-                    <Text style={styles.donationBy}>By {d.donorName}</Text>
+                    <Text style={styles.donationBy} numberOfLines={1}>{d.destination?.name ?? "Centre unavailable"} · {d.donorName}</Text>
                   </View>
                   <View style={{ alignItems: "flex-end" }}>
                     <Text style={styles.donationAmt}>{d.quantity} items</Text>
                     <Text style={styles.donationTime}>{timeAgo(d.createdAt)}</Text>
                   </View>
-                </View>
+                </Pressable>
               ))}
+            </View>
+
+            <View style={styles.card}>
+              <View style={styles.cardHeader}>
+                <Text style={styles.cardTitle}>Recent Community Updates</Text>
+                <Pressable onPress={() => setSection("updates")}><Text style={styles.viewAll}>View All</Text></Pressable>
+              </View>
+              {announcements.slice(0, 3).map((item) => (
+                <Pressable key={item.id} onPress={() => setSection("updates")} style={{ paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: "#F8FAFC" }}>
+                  <Text style={styles.donationTitle}>{item.title}</Text>
+                  <Text style={styles.donationBy} numberOfLines={2}>{item.body}</Text>
+                  <Text style={styles.donationTime}>{timeAgo(item.createdAt)}</Text>
+                </Pressable>
+              ))}
+              {announcements.length === 0 && <Text style={styles.requestLoc}>No published updates yet.</Text>}
+            </View>
+
+            <AdminUserActivityFeed />
+
+            <View style={styles.card}>
+              <View style={styles.cardHeader}>
+                <Text style={styles.cardTitle}>Recent Notifications</Text>
+                <Pressable onPress={() => router.push("/(tabs)/notifications" as any)}><Text style={styles.viewAll}>View All</Text></Pressable>
+              </View>
+              {notifications.slice(0, 5).map((notification) => (
+                <Pressable key={notification.id} onPress={() => openAdminNotification(notification)} style={{ paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: "#F8FAFC" }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                    {!notification.read && <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: BLUE_LIGHT }} />}
+                    <Text style={styles.donationTitle}>{notification.title}</Text>
+                    <Text style={[styles.donationTime, { marginLeft: "auto" as any }]}>{timeAgo(notification.createdAt)}</Text>
+                  </View>
+                  <Text style={styles.donationBy} numberOfLines={2}>{notification.body}</Text>
+                </Pressable>
+              ))}
+              {notifications.length === 0 && <Text style={styles.requestLoc}>No notifications yet.</Text>}
             </View>
 
             {/* PENDING REPORTS */}
@@ -480,33 +947,229 @@ export default function AdminScreen() {
                   <Text style={styles.viewAll}>View All</Text>
                 </Pressable>
               </View>
-              {PENDING_REPORTS.map((r) => (
-                <View key={r.id} style={styles.reportRow}>
-                  <View style={[styles.reportFlag, { backgroundColor: r.color + "15" }]}>
-                    <Feather name="flag" size={14} color={r.color} />
+              {reportsLoading ? (
+                <ActivityIndicator color={BLUE_LIGHT} />
+              ) : pendingReports.length ? pendingReports.slice(0, 4).map((report) => (
+                <View key={report.id} style={styles.reportRow}>
+                  <View style={[styles.reportFlag, { backgroundColor: "#F8FAFC" }]}>
+                    <Feather name="flag" size={14} color="#EF4444" />
                   </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.reportTitle}>{r.title}</Text>
-                    <Text style={styles.reportDesc}>{r.desc}</Text>
-                  </View>
-                  <Text style={styles.reportTime}>{r.time}</Text>
+                  <Pressable
+                    onPress={() => navTo("reports")}
+                    accessibilityRole="button"
+                    style={{ flex: 1 }}
+                  >
+                    <Text style={styles.reportTitle}>{report.reason}</Text>
+                    <Text style={styles.reportDesc}>{report.requestTitle} · {report.reporterName}</Text>
+                  </Pressable>
+                  <Text style={styles.reportTime}>{timeAgo(report.createdAt)}</Text>
+                  <Pressable onPress={() => handleResolveReport(report.id)} style={styles.reportResolveButton}>
+                    <Text style={styles.reportResolveText}>Resolve</Text>
+                  </Pressable>
                 </View>
-              ))}
+              )) : <Text style={styles.reportDesc}>No pending reports.</Text>}
             </View>
 
             {/* SYSTEM SUMMARY */}
             <View style={styles.card}>
-              <Text style={[styles.cardTitle, { marginBottom: 10 }]}>System Summary</Text>
-              {SYSTEM_SUMMARY.map((s, i) => (
-                <View key={s.label} style={[styles.summaryRow, i < SYSTEM_SUMMARY.length - 1 && { borderBottomWidth: 1, borderBottomColor: "#F1F5F9" }]}>
-                  <Text style={styles.summaryLabel}>{s.label}</Text>
+              <Pressable
+                onPress={() => setSystemSummaryVisible(true)}
+                accessibilityRole="button"
+                accessibilityLabel="View full system summary"
+                style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}
+              >
+                <Text style={styles.cardTitle}>System Summary</Text>
+                <Text style={styles.viewAll}>View details</Text>
+              </Pressable>
+              {systemSummary.map((summary, i) => (
+                <Pressable
+                  key={summary.label}
+                  onPress={() => {
+                    const target: Record<string, Section> = {
+                      "Registered Users": "users",
+                      "Authorised Admins": "users",
+                      "Total Help Requests": "requests",
+                      "Active Help Requests": "requests",
+                      "Donation Contributions": "donations",
+                      "Items Donated": "donations",
+                      "Registered Community Centres": "centres",
+                      "Official Updates": "updates",
+                    };
+                    navTo(target[summary.label]);
+                  }}
+                  accessibilityRole="button"
+                  style={[styles.summaryRow, i < systemSummary.length - 1 && { borderBottomWidth: 1, borderBottomColor: "#F8FAFC" }]}
+                >
+                  <Text style={styles.summaryLabel}>{summary.label}</Text>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                    <Text style={styles.summaryVal}>{s.val}</Text>
-                    <Feather name="chevron-right" size={14} color="#CBD5E1" />
+                    <Text style={styles.summaryVal}>{summary.val}</Text>
+                    <Feather name="chevron-right" size={14} color="#DBEAFE" />
                   </View>
-                </View>
+                </Pressable>
               ))}
             </View>
+          </View>
+        )}
+
+        {section === "updates" && (
+          <View style={{ padding: 14, gap: 12 }}>
+            <View style={[styles.card, { gap: 12 }]}> 
+              <View style={styles.cardHeader}>
+                <Text style={styles.cardTitle}>{editingAnnouncementId ? "Edit official update" : "Create official update"}</Text>
+                {editingAnnouncementId && (
+                  <Pressable onPress={resetAnnouncementForm}>
+                    <Text style={styles.viewAll}>Cancel</Text>
+                  </Pressable>
+                )}
+              </View>
+              {!!announcementActionError && <Text accessibilityRole="alert" style={{ color: "#EF4444", fontSize: 12, fontFamily: "Inter_500Medium" }}>{announcementActionError}</Text>}
+
+              <TextInput value={announcementTitle} onChangeText={setAnnouncementTitle} placeholder="Update title" style={{ borderWidth:1, borderColor:"#DBEAFE", borderRadius:10, paddingHorizontal:12, paddingVertical:10, fontSize:13, color:"#1E3A5F", backgroundColor:"#F8FAFC" }} />
+              <TextInput value={announcementBody} onChangeText={setAnnouncementBody} multiline numberOfLines={5} placeholder="Write the community update for all users..." style={{ borderWidth:1, borderColor:"#DBEAFE", borderRadius:10, paddingHorizontal:12, paddingVertical:10, minHeight:110, textAlignVertical:"top", fontSize:13, color:"#1E3A5F", backgroundColor:"#F8FAFC" }} />
+
+              <AnnouncementImageControl
+                imageUrl={announcementImage}
+                onPick={handlePickAnnouncementImage}
+                onRemove={() => setAnnouncementImage(null)}
+              />
+
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                {(["general", "update", "event", "emergency"] as const).map((category) => (
+                  <Pressable key={category} onPress={() => setAnnouncementCategory(category)} style={{ borderRadius:999, paddingHorizontal:10, paddingVertical:6, backgroundColor: announcementCategory === category ? "#DBEAFE" : "#F8FAFC" }}>
+                    <Text style={{ fontSize:11, color: announcementCategory === category ? "#2563EB" : "#64748B", fontFamily: "Inter_600SemiBold", textTransform: "capitalize" }}>{category}</Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              <Pressable onPress={handleCreateAnnouncement} disabled={postingAnnouncement} style={{ backgroundColor: postingAnnouncement ? "#EFF6FF" : BLUE_LIGHT, borderRadius:12, paddingVertical:12, alignItems:"center" }}>
+                <Text style={{ color: "#FFFFFF", fontFamily: "Inter_700Bold", fontSize:13 }}>{postingAnnouncement ? (editingAnnouncementId ? "Saving..." : "Publishing...") : (editingAnnouncementId ? "Save update" : "Publish update")}</Text>
+              </Pressable>
+            </View>
+
+            <Text style={styles.sectionHeader}>{announcements.length} OFFICIAL UPDATES</Text>
+            {announcementsLoading && <ActivityIndicator color={BLUE_LIGHT} />}
+            {!!announcementsError && (
+              <Text style={{ color: "#EF4444", fontSize: 12, fontFamily: "Inter_500Medium" }}>{announcementsError}</Text>
+            )}
+            {announcements.map((item) => (
+              <View key={item.id} style={styles.card}>
+                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                  <View style={{ backgroundColor: "#EFF6FF", borderRadius: 999, paddingHorizontal: 8, paddingVertical: 4 }}>
+                    <Text style={{ fontSize: 10, color: "#0F2747", fontFamily: "Inter_700Bold", textTransform: "uppercase" }}>{item.category}</Text>
+                  </View>
+                  <Text style={styles.donationTime}>{timeAgo(item.createdAt)}</Text>
+                </View>
+                <Text style={[styles.requestName, { marginTop: 10 }]}>{item.title}</Text>
+                <Text style={[styles.requestLoc, { marginTop: 6 }]}>{item.body}</Text>
+                {item.imageUrl ? (
+                  <Image source={{ uri: item.imageUrl }} style={{ width: "100%", height: 180, marginTop: 10, borderRadius: 8, backgroundColor: "#F8FAFC" }} resizeMode="cover" />
+                ) : null}
+                <Text style={[styles.requestLoc, { marginTop: 8, color: "#64748B" }]}>By {item.createdByName}</Text>
+                <View style={{ flexDirection: "row", gap: 8, marginTop: 12 }}>
+                  <Pressable onPress={() => { setEditingAnnouncementId(item.id); setAnnouncementTitle(item.title); setAnnouncementBody(item.body); setAnnouncementImage(item.imageUrl ?? null); setAnnouncementCategory(item.category); }} style={{ backgroundColor: "#DBEAFE", paddingHorizontal: 10, paddingVertical: 8, borderRadius: 10 }}>
+                    <Text style={{ fontSize: 11, color: BLUE_LIGHT, fontFamily: "Inter_600SemiBold" }}>Edit</Text>
+                  </Pressable>
+                  <Pressable onPress={() => handleDeleteAnnouncement(item.id)} style={{ backgroundColor: "#F8FAFC", paddingHorizontal: 10, paddingVertical: 8, borderRadius: 10 }}>
+                    <Text style={{ fontSize: 11, color: "#EF4444", fontFamily: "Inter_600SemiBold" }}>Delete</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {section === "organisations" && (
+          <View style={{ padding: 14, gap: 12 }}>
+            <View style={[styles.card, { gap: 10 }]}> 
+              <View style={styles.cardHeader}>
+                <Text style={styles.cardTitle}>{editingOrgId ? "Edit organisation" : "Add verified organisation"}</Text>
+                {editingOrgId && (
+                  <Pressable onPress={() => { setEditingOrgId(null); setOrgForm({ name: "", type: "Police station", location: "", contact: "", description: "" }); }}>
+                    <Text style={styles.viewAll}>Cancel</Text>
+                  </Pressable>
+                )}
+              </View>
+
+              <TextInput value={orgForm.name} onChangeText={(value) => setOrgForm((prev) => ({ ...prev, name: value }))} placeholder="Organisation name" style={{ borderWidth:1, borderColor:"#DBEAFE", borderRadius:10, paddingHorizontal:12, paddingVertical:10, fontSize:13, color:"#1E3A5F", backgroundColor:"#F8FAFC" }} />
+              <TextInput value={orgForm.type} onChangeText={(value) => setOrgForm((prev) => ({ ...prev, type: value }))} placeholder="Type (Police station, NGO, Municipality...)" style={{ borderWidth:1, borderColor:"#DBEAFE", borderRadius:10, paddingHorizontal:12, paddingVertical:10, fontSize:13, color:"#1E3A5F", backgroundColor:"#F8FAFC" }} />
+              <TextInput value={orgForm.location} onChangeText={(value) => setOrgForm((prev) => ({ ...prev, location: value }))} placeholder="Location / address" style={{ borderWidth:1, borderColor:"#DBEAFE", borderRadius:10, paddingHorizontal:12, paddingVertical:10, fontSize:13, color:"#1E3A5F", backgroundColor:"#F8FAFC" }} />
+              <TextInput value={orgForm.contact} onChangeText={(value) => setOrgForm((prev) => ({ ...prev, contact: value }))} placeholder="Contact details" style={{ borderWidth:1, borderColor:"#DBEAFE", borderRadius:10, paddingHorizontal:12, paddingVertical:10, fontSize:13, color:"#1E3A5F", backgroundColor:"#F8FAFC" }} />
+              <TextInput value={orgForm.description} onChangeText={(value) => setOrgForm((prev) => ({ ...prev, description: value }))} multiline placeholder="Description" style={{ borderWidth:1, borderColor:"#DBEAFE", borderRadius:10, paddingHorizontal:12, paddingVertical:10, minHeight:90, textAlignVertical:"top", fontSize:13, color:"#1E3A5F", backgroundColor:"#F8FAFC" }} />
+
+              <Pressable onPress={handleSaveOrganisation} style={{ backgroundColor: BLUE_LIGHT, borderRadius:12, paddingVertical:12, alignItems:"center" }}>
+                <Text style={{ color: "#FFFFFF", fontFamily: "Inter_700Bold", fontSize:13 }}>{editingOrgId ? "Save organisation" : "Add organisation"}</Text>
+              </Pressable>
+            </View>
+
+            <Text style={styles.sectionHeader}>{organisations.length} VERIFIED ORGANISATIONS</Text>
+            {organisations.map((org) => (
+              <View key={org.id} style={styles.card}>
+                <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 12 }}>
+                  <View style={{ flex:1 }}>
+                    <Text style={styles.requestName}>{org.name}</Text>
+                    <Text style={[styles.requestLoc, { marginTop: 2, color: BLUE_LIGHT }]}>{org.type}</Text>
+                  </View>
+                  <View style={{ backgroundColor: "#EFF6FF", borderRadius: 999, paddingHorizontal: 8, paddingVertical: 5 }}>
+                    <Text style={{ fontSize: 10, color: "#0F2747", fontFamily: "Inter_700Bold" }}>Verified</Text>
+                  </View>
+                </View>
+                <Text style={[styles.requestLoc, { marginTop: 8 }]}>{org.location}</Text>
+                <Text style={[styles.requestLoc, { marginTop: 4 }]}>{org.contact}</Text>
+                <Text style={[styles.requestLoc, { marginTop: 8 }]}>{org.description}</Text>
+                <View style={{ flexDirection: "row", gap: 8, marginTop: 12 }}>
+                  <Pressable onPress={() => { setEditingOrgId(org.id); setOrgForm({ name: org.name, type: org.type, location: org.location, contact: org.contact, description: org.description }); }} style={{ backgroundColor: "#DBEAFE", paddingHorizontal: 10, paddingVertical: 8, borderRadius: 10 }}>
+                    <Text style={{ fontSize: 11, color: BLUE_LIGHT, fontFamily: "Inter_600SemiBold" }}>Edit</Text>
+                  </Pressable>
+                  <Pressable onPress={() => handleDeleteOrganisation(org.id)} style={{ backgroundColor: "#F8FAFC", paddingHorizontal: 10, paddingVertical: 8, borderRadius: 10 }}>
+                    <Text style={{ fontSize: 11, color: "#EF4444", fontFamily: "Inter_600SemiBold" }}>Remove</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {section === "centres" && (
+          <View style={{ padding: 14, gap: 12 }}>
+            <View style={[styles.card, { gap: 10 }]}> 
+              <View style={styles.cardHeader}>
+                <Text style={styles.cardTitle}>{editingCentreId ? "Edit centre" : "Add community centre"}</Text>
+                {editingCentreId && (
+                  <Pressable onPress={() => { setEditingCentreId(null); setCentreForm({ name: "", address: "", contact: "", openingHours: "", description: "" }); }}>
+                    <Text style={styles.viewAll}>Cancel</Text>
+                  </Pressable>
+                )}
+              </View>
+
+              <TextInput value={centreForm.name} onChangeText={(value) => setCentreForm((prev) => ({ ...prev, name: value }))} placeholder="Centre name" style={{ borderWidth:1, borderColor:"#DBEAFE", borderRadius:10, paddingHorizontal:12, paddingVertical:10, fontSize:13, color:"#1E3A5F", backgroundColor:"#F8FAFC" }} />
+              <TextInput value={centreForm.address} onChangeText={(value) => setCentreForm((prev) => ({ ...prev, address: value }))} placeholder="Address / location" style={{ borderWidth:1, borderColor:"#DBEAFE", borderRadius:10, paddingHorizontal:12, paddingVertical:10, fontSize:13, color:"#1E3A5F", backgroundColor:"#F8FAFC" }} />
+              <TextInput value={centreForm.contact} onChangeText={(value) => setCentreForm((prev) => ({ ...prev, contact: value }))} placeholder="Contact information" style={{ borderWidth:1, borderColor:"#DBEAFE", borderRadius:10, paddingHorizontal:12, paddingVertical:10, fontSize:13, color:"#1E3A5F", backgroundColor:"#F8FAFC" }} />
+              <TextInput value={centreForm.openingHours} onChangeText={(value) => setCentreForm((prev) => ({ ...prev, openingHours: value }))} placeholder="Opening hours" style={{ borderWidth:1, borderColor:"#DBEAFE", borderRadius:10, paddingHorizontal:12, paddingVertical:10, fontSize:13, color:"#1E3A5F", backgroundColor:"#F8FAFC" }} />
+              <TextInput value={centreForm.description} onChangeText={(value) => setCentreForm((prev) => ({ ...prev, description: value }))} multiline placeholder="Description" style={{ borderWidth:1, borderColor:"#DBEAFE", borderRadius:10, paddingHorizontal:12, paddingVertical:10, minHeight:90, textAlignVertical:"top", fontSize:13, color:"#1E3A5F", backgroundColor:"#F8FAFC" }} />
+
+              <Pressable onPress={handleSaveCentre} style={{ backgroundColor: BLUE_LIGHT, borderRadius:12, paddingVertical:12, alignItems:"center" }}>
+                <Text style={{ color: "#FFFFFF", fontFamily: "Inter_700Bold", fontSize:13 }}>{editingCentreId ? "Save centre" : "Add centre"}</Text>
+              </Pressable>
+            </View>
+
+            <Text style={styles.sectionHeader}>{centres.length} SAFE COMMUNITY CENTRES</Text>
+            {centres.map((centre) => (
+              <View key={centre.id} style={styles.card}>
+                <Text style={styles.requestName}>{centre.name}</Text>
+                <Text style={[styles.requestLoc, { marginTop: 8 }]}>{centre.address}</Text>
+                <Text style={[styles.requestLoc, { marginTop: 4 }]}>{centre.contact}</Text>
+                <Text style={[styles.requestLoc, { marginTop: 4 }]}>{centre.openingHours}</Text>
+                <Text style={[styles.requestLoc, { marginTop: 8 }]}>{centre.description}</Text>
+                <View style={{ flexDirection: "row", gap: 8, marginTop: 12 }}>
+                  <Pressable onPress={() => { setEditingCentreId(centre.id); setCentreForm({ name: centre.name, address: centre.address, contact: centre.contact ?? "", openingHours: centre.openingHours, description: centre.description }); }} style={{ backgroundColor: "#DBEAFE", paddingHorizontal: 10, paddingVertical: 8, borderRadius: 10 }}>
+                    <Text style={{ fontSize: 11, color: BLUE_LIGHT, fontFamily: "Inter_600SemiBold" }}>Edit</Text>
+                  </Pressable>
+                  <Pressable onPress={() => handleDeleteCentre(centre.id)} style={{ backgroundColor: "#F8FAFC", paddingHorizontal: 10, paddingVertical: 8, borderRadius: 10 }}>
+                    <Text style={{ fontSize: 11, color: "#EF4444", fontFamily: "Inter_600SemiBold" }}>Remove</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ))}
           </View>
         )}
 
@@ -584,21 +1247,32 @@ export default function AdminScreen() {
             );
           }
 
+          async function handleCentreReceiverRole(u: typeof allUsers[0], centreId: string) {
+            const enabled = !(u.authorizedCentreIds ?? []).includes(centreId);
+            const centreName = centres.find((centre) => centre.id === centreId)?.name ?? "this centre";
+            try {
+              await authorizeCentreReceiver(u.id, centreId, enabled);
+              Alert.alert("Receiver access updated", `${u.name} ${enabled ? "can now" : "can no longer"} confirm donations at ${centreName}.`);
+            } catch (error) {
+              Alert.alert("Could not update receiver access", error instanceof Error ? error.message : "Please try again.");
+            }
+          }
+
           return (
             <View style={{ padding: 14, gap: 10 }}>
               {/* Search bar */}
               <View style={[styles.card, { flexDirection: "row", alignItems: "center", gap: 10, padding: 12 }]}>
-                <Feather name="search" size={16} color="#94A3B8" />
+                <Feather name="search" size={16} color="#64748B" />
                 <TextInput
                   value={userSearch}
                   onChangeText={setUserSearch}
                   placeholder="Search users by name or email…"
-                  placeholderTextColor="#94A3B8"
-                  style={{ flex: 1, fontSize: 13, fontFamily: "Inter_400Regular", color: "#1E293B" }}
+                  placeholderTextColor="#64748B"
+                  style={{ flex: 1, fontSize: 13, fontFamily: "Inter_400Regular", color: "#1E3A5F" }}
                 />
                 {userSearch.length > 0 && (
                   <Pressable onPress={() => setUserSearch("")}>
-                    <Feather name="x" size={14} color="#94A3B8" />
+                    <Feather name="x" size={14} color="#64748B" />
                   </Pressable>
                 )}
               </View>
@@ -615,7 +1289,7 @@ export default function AdminScreen() {
                     key={u.id}
                     style={[
                       styles.card,
-                      u.suspended && { borderWidth: 1.5, borderColor: "#FEF2F2" },
+                      u.suspended && { borderWidth: 1.5, borderColor: "#F8FAFC" },
                     ]}
                   >
                     {/* Top row: avatar + info + badges */}
@@ -634,8 +1308,8 @@ export default function AdminScreen() {
                         <View style={{ flexDirection: "row", alignItems: "center", gap: 5, flexWrap: "wrap" }}>
                           <Text style={styles.requestName}>{u.name}</Text>
                           {isSelf && (
-                            <View style={{ backgroundColor: "#F0FDF4", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 }}>
-                              <Text style={{ fontSize: 9, color: "#16A34A", fontFamily: "Inter_600SemiBold" }}>You</Text>
+                            <View style={{ backgroundColor: "#ECFDF5", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 }}>
+                              <Text style={{ fontSize: 9, color: "#10B981", fontFamily: "Inter_600SemiBold" }}>You</Text>
                             </View>
                           )}
                           {u.isAdmin && (
@@ -644,7 +1318,7 @@ export default function AdminScreen() {
                             </View>
                           )}
                           {u.suspended && (
-                            <View style={{ backgroundColor: "#FEF2F2", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 }}>
+                            <View style={{ backgroundColor: "#F8FAFC", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 }}>
                               <Text style={{ fontSize: 9, color: "#EF4444", fontFamily: "Inter_600SemiBold" }}>Suspended</Text>
                             </View>
                           )}
@@ -655,38 +1329,53 @@ export default function AdminScreen() {
                     </View>
 
                     {/* Stats row */}
-                    <View style={{ flexDirection: "row", gap: 14, marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: "#F1F5F9" }}>
+                    <View style={{ flexDirection: "row", gap: 14, marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: "#F8FAFC" }}>
                       <View style={{ alignItems: "center", gap: 1 }}>
                         <Text style={{ fontSize: 14, fontFamily: "Inter_700Bold", color: BLUE_LIGHT }}>{u.requestsCreated}</Text>
-                        <Text style={{ fontSize: 9, fontFamily: "Inter_400Regular", color: "#94A3B8" }}>Requests</Text>
+                        <Text style={{ fontSize: 9, fontFamily: "Inter_400Regular", color: "#64748B" }}>Requests</Text>
                       </View>
                       <View style={{ alignItems: "center", gap: 1 }}>
                         <Text style={{ fontSize: 14, fontFamily: "Inter_700Bold", color: "#14B8A6" }}>{u.helpOffered}</Text>
-                        <Text style={{ fontSize: 9, fontFamily: "Inter_400Regular", color: "#94A3B8" }}>Helped</Text>
+                        <Text style={{ fontSize: 9, fontFamily: "Inter_400Regular", color: "#64748B" }}>Helped</Text>
                       </View>
                       <View style={{ alignItems: "center", gap: 1 }}>
                         <Text style={{ fontSize: 14, fontFamily: "Inter_700Bold", color: "#F59E0B" }}>{donatedItems}</Text>
-                        <Text style={{ fontSize: 9, fontFamily: "Inter_400Regular", color: "#94A3B8" }}>Donated</Text>
+                        <Text style={{ fontSize: 9, fontFamily: "Inter_400Regular", color: "#64748B" }}>Donated</Text>
                       </View>
                       <View style={{ flex: 1 }} />
-                      <Text style={{ fontSize: 9, fontFamily: "Inter_400Regular", color: "#CBD5E1", alignSelf: "flex-end" }}>
+                      <Text style={{ fontSize: 9, fontFamily: "Inter_400Regular", color: "#DBEAFE", alignSelf: "flex-end" }}>
                         Since {new Date(u.createdAt).toLocaleDateString("en-US", { month: "short", year: "numeric" })}
                       </Text>
                     </View>
 
                     {/* Action buttons — hidden for self */}
                     {!isSelf && (
-                      <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
+                      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
+                        {centres.map((centre) => {
+                          const assigned = (u.authorizedCentreIds ?? []).includes(centre.id);
+                          return (
+                            <Pressable
+                              key={`receiver-${centre.id}`}
+                              onPress={() => handleCentreReceiverRole(u, centre.id)}
+                              style={[styles.adminActionBtn, { backgroundColor: assigned ? "#ECFDF5" : "#F8FAFC" }]}
+                            >
+                              <Feather name="map-pin" size={12} color={assigned ? "#0D9488" : "#64748B"} />
+                              <Text style={{ fontSize: 11, fontFamily: "Inter_600SemiBold", color: assigned ? "#0D9488" : "#64748B" }}>
+                                {assigned ? "Revoke" : "Authorize"} · {centre.name}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
                         {/* Promote / Demote */}
                         <Pressable
                           onPress={() => handleToggleAdmin(u)}
                           style={({ pressed }) => [
                             styles.adminActionBtn,
-                            { backgroundColor: u.isAdmin ? "#FEF3C7" : "#DBEAFE", opacity: pressed ? 0.75 : 1 },
+                            { backgroundColor: u.isAdmin ? "#F8FAFC" : "#DBEAFE", opacity: pressed ? 0.75 : 1 },
                           ]}
                         >
-                          <Feather name="shield" size={12} color={u.isAdmin ? "#D97706" : BLUE_LIGHT} />
-                          <Text style={{ fontSize: 11, fontFamily: "Inter_600SemiBold", color: u.isAdmin ? "#D97706" : BLUE_LIGHT }}>
+                          <Feather name="shield" size={12} color={u.isAdmin ? "#F59E0B" : BLUE_LIGHT} />
+                          <Text style={{ fontSize: 11, fontFamily: "Inter_600SemiBold", color: u.isAdmin ? "#F59E0B" : BLUE_LIGHT }}>
                             {u.isAdmin ? "Remove Admin" : "Make Admin"}
                           </Text>
                         </Pressable>
@@ -696,11 +1385,11 @@ export default function AdminScreen() {
                           onPress={() => handleSuspend(u)}
                           style={({ pressed }) => [
                             styles.adminActionBtn,
-                            { backgroundColor: u.suspended ? "#F0FDF4" : "#FEF2F2", opacity: pressed ? 0.75 : 1 },
+                            { backgroundColor: u.suspended ? "#ECFDF5" : "#F8FAFC", opacity: pressed ? 0.75 : 1 },
                           ]}
                         >
-                          <Feather name={u.suspended ? "user-check" : "user-x"} size={12} color={u.suspended ? "#16A34A" : "#EF4444"} />
-                          <Text style={{ fontSize: 11, fontFamily: "Inter_600SemiBold", color: u.suspended ? "#16A34A" : "#EF4444" }}>
+                          <Feather name={u.suspended ? "user-check" : "user-x"} size={12} color={u.suspended ? "#10B981" : "#EF4444"} />
+                          <Text style={{ fontSize: 11, fontFamily: "Inter_600SemiBold", color: u.suspended ? "#10B981" : "#EF4444" }}>
                             {u.suspended ? "Unsuspend" : "Suspend"}
                           </Text>
                         </Pressable>
@@ -713,8 +1402,8 @@ export default function AdminScreen() {
                             { backgroundColor: "#F8FAFC", opacity: pressed ? 0.75 : 1 },
                           ]}
                         >
-                          <Feather name="trash-2" size={12} color="#94A3B8" />
-                          <Text style={{ fontSize: 11, fontFamily: "Inter_600SemiBold", color: "#94A3B8" }}>Delete</Text>
+                          <Feather name="trash-2" size={12} color="#64748B" />
+                          <Text style={{ fontSize: 11, fontFamily: "Inter_600SemiBold", color: "#64748B" }}>Delete</Text>
                         </Pressable>
                       </View>
                     )}
@@ -724,8 +1413,8 @@ export default function AdminScreen() {
 
               {filtered.length === 0 && (
                 <View style={{ alignItems: "center", paddingVertical: 40, gap: 8 }}>
-                  <Feather name="users" size={32} color="#CBD5E1" />
-                  <Text style={{ color: "#94A3B8", fontFamily: "Inter_400Regular", fontSize: 14 }}>No users match your search</Text>
+                  <Feather name="users" size={32} color="#DBEAFE" />
+                  <Text style={{ color: "#64748B", fontFamily: "Inter_400Regular", fontSize: 14 }}>No users match your search</Text>
                 </View>
               )}
             </View>
@@ -738,13 +1427,13 @@ export default function AdminScreen() {
             {requests.map((req) => (
               <Pressable key={req.id} onPress={() => router.push(`/request/${req.id}` as any)} style={styles.card}>
                 <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
-                  <View style={[styles.requestAvatar, { backgroundColor: req.isEmergency ? "#FEE2E2" : "#DBEAFE" }]}>
+                  <View style={[styles.requestAvatar, { backgroundColor: req.isEmergency ? "#F8FAFC" : "#DBEAFE" }]}>
                     <Text style={[styles.requestAvatarText, { color: req.isEmergency ? "#EF4444" : BLUE_LIGHT }]}>{req.requesterName.charAt(0)}</Text>
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.requestName} numberOfLines={1}>{req.title}</Text>
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 3, marginTop: 2 }}>
-                      <Feather name="map-pin" size={9} color="#94A3B8" />
+                      <Feather name="map-pin" size={9} color="#64748B" />
                       <Text style={styles.requestLoc}>{req.location?.address ?? "Your City"}</Text>
                     </View>
                     <Text style={[styles.requestLoc, { marginTop: 2 }]}>by {req.requesterName} · {timeAgo(req.createdAt)}</Text>
@@ -756,7 +1445,7 @@ export default function AdminScreen() {
                       </Text>
                     </View>
                     {req.isEmergency && (
-                      <View style={[styles.statusPill, { backgroundColor: "#FEE2E2" }]}>
+                      <View style={[styles.statusPill, { backgroundColor: "#F8FAFC" }]}>
                         <Text style={[styles.statusPillText, { color: "#EF4444" }]}>Emergency</Text>
                       </View>
                     )}
@@ -769,70 +1458,58 @@ export default function AdminScreen() {
 
         {section === "donations" && (
           <View style={{ padding: 14, gap: 10 }}>
+            <View style={[styles.card, { gap: 10 }]}>
+              <Text style={styles.cardTitle}>Official donation information</Text>
+              <Text style={styles.requestLoc}>This guidance appears on the user Donation page. Item choices remain non-cash.</Text>
+              <TextInput
+                value={donationInstructions}
+                onChangeText={setDonationInstructions}
+                multiline
+                maxLength={700}
+                placeholder="Describe accepted non-cash items and drop-off guidance"
+                style={{ borderWidth: 1, borderColor: "#DBEAFE", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, minHeight: 100, textAlignVertical: "top", fontSize: 13, color: "#1E3A5F", backgroundColor: "#F8FAFC" }}
+              />
+              <Pressable onPress={handleSaveDonationInstructions} disabled={donationInfoLoading || savingDonationInstructions} style={{ backgroundColor: donationInfoLoading || savingDonationInstructions ? "#EFF6FF" : BLUE_LIGHT, borderRadius: 10, paddingVertical: 11, alignItems: "center" }}>
+                <Text style={{ color: "#FFFFFF", fontFamily: "Inter_700Bold", fontSize: 13 }}>{savingDonationInstructions ? "Saving..." : "Save donation information"}</Text>
+              </Pressable>
+            </View>
             <LinearGradient colors={["#14B8A6", "#0D9488"]} style={[styles.donationBanner]}>
-              <Feather name="gift" size={28} color="#fff" />
+              <Feather name="gift" size={28} color="#FFFFFF" />
               <View>
-                <Text style={{ color: "#fff", fontSize: 28, fontFamily: "Inter_700Bold" }}>{totalItems}</Text>
+                <Text style={{ color: "#FFFFFF", fontSize: 28, fontFamily: "Inter_700Bold" }}>{totalItems}</Text>
                 <Text style={{ color: "rgba(255,255,255,0.8)", fontSize: 12, fontFamily: "Inter_400Regular" }}>
                   Total items donated · {donations.length} contributions
                 </Text>
               </View>
             </LinearGradient>
-            <Text style={styles.sectionHeader}>{donations.length} DONATIONS</Text>
-            {donations.map((d) => (
-              <View key={d.id} style={[styles.card, { flexDirection: "row", gap: 12, alignItems: "center" }]}>
-                <View style={[styles.donationIcon, { width: 52, height: 52, borderRadius: 14, backgroundColor: "#F0FDFA" }]}>
-                  <Feather name={(d.itemIcon ?? "gift") as any} size={22} color="#14B8A6" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.donationTitle}>{d.donorName}</Text>
-                  <Text style={styles.donationBy}>{d.description ?? "No description"}</Text>
-                  <Text style={styles.donationTime}>{timeAgo(d.createdAt)}</Text>
-                </View>
-                <View style={{ alignItems: "flex-end", gap: 2 }}>
-                  <Text style={[styles.donationAmt, { fontSize: 16, color: "#14B8A6" }]}>{d.quantity}×</Text>
-                  <Text style={{ fontSize: 11, fontFamily: "Inter_600SemiBold", color: "#0D9488" }}>{d.itemType}</Text>
-                </View>
-              </View>
-            ))}
-          </View>
-        )}
-
-        {section === "chat" && (
-          <View style={{ padding: 14, gap: 10 }}>
-            <Text style={styles.sectionHeader}>{messages.length} COMMUNITY MESSAGES</Text>
-            {[...messages].reverse().map((m) => (
-              <View key={m.id} style={[styles.card, { flexDirection: "row", gap: 10, alignItems: "flex-start" }]}>
-                <View style={[styles.requestAvatar, { width: 38, height: 38, borderRadius: 19 }]}>
-                  <Text style={[styles.requestAvatarText, { fontSize: 14 }]}>{m.userName.charAt(0)}</Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                    <Text style={styles.requestName}>{m.userName}</Text>
-                    <Text style={[styles.donationTime, { marginLeft: "auto" as any }]}>{timeAgo(m.createdAt)}</Text>
-                  </View>
-                  <Text style={[styles.requestLoc, { marginTop: 2 }]} numberOfLines={3}>{m.text}</Text>
-                </View>
-              </View>
-            ))}
+            {donationsError ? <Text accessibilityRole="alert" style={{ color: "#B91C1C" }}>{donationsError}</Text> : null}
+            {donationsLoading ? <ActivityIndicator color="#0D9488" /> : null}
+            <DonationManagementPanel
+              donations={donations}
+              selectedDonation={selectedDonation}
+              onSelectDonation={setSelectedDonationId}
+            />
           </View>
         )}
 
         {section === "reports" && (
           <View style={{ padding: 14, gap: 10 }}>
-            <Text style={styles.sectionHeader}>{PENDING_REPORTS.length} PENDING REPORTS</Text>
-            {PENDING_REPORTS.map((r) => (
-              <View key={r.id} style={[styles.card, { flexDirection: "row", gap: 12, alignItems: "center" }]}>
-                <View style={[styles.reportFlag, { width: 44, height: 44, borderRadius: 12, backgroundColor: r.color + "15" }]}>
-                  <Feather name="flag" size={20} color={r.color} />
+            <Text style={styles.sectionHeader}>{pendingReports.length} PENDING REPORTS</Text>
+            {reportsLoading ? <ActivityIndicator color={BLUE_LIGHT} /> : pendingReports.length ? pendingReports.map((report) => (
+              <View key={report.id} style={[styles.card, { flexDirection: "row", gap: 12, alignItems: "center" }]}>
+                <View style={[styles.reportFlag, { width: 44, height: 44, borderRadius: 12, backgroundColor: "#F8FAFC" }]}>
+                  <Feather name="flag" size={20} color="#EF4444" />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.reportTitle}>{r.title}</Text>
-                  <Text style={styles.reportDesc}>{r.desc}</Text>
+                  <Text style={styles.reportTitle}>{report.reason}</Text>
+                  <Text style={styles.reportDesc}>{report.requestTitle} · {report.reporterName}</Text>
+                  <Text style={styles.reportTime}>{timeAgo(report.createdAt)}</Text>
                 </View>
-                <Text style={styles.reportTime}>{r.time}</Text>
+                <Pressable onPress={() => handleResolveReport(report.id)} style={styles.reportResolveButton}>
+                  <Text style={styles.reportResolveText}>Resolve</Text>
+                </Pressable>
               </View>
-            ))}
+            )) : <Text style={styles.reportDesc}>No pending reports.</Text>}
           </View>
         )}
 
@@ -904,8 +1581,8 @@ export default function AdminScreen() {
                     <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: chip.color + "18", alignItems: "center", justifyContent: "center" }}>
                       <Feather name={chip.icon} size={13} color={chip.color} />
                     </View>
-                    <Text style={{ fontSize: 18, fontFamily: "Inter_700Bold", color: "#1E293B" }}>{chip.value}</Text>
-                    <Text style={{ fontSize: 9, fontFamily: "Inter_400Regular", color: "#94A3B8", textAlign: "center" }}>{chip.label}</Text>
+                    <Text style={{ fontSize: 18, fontFamily: "Inter_700Bold", color: "#1E3A5F" }}>{chip.value}</Text>
+                    <Text style={{ fontSize: 9, fontFamily: "Inter_400Regular", color: "#64748B", textAlign: "center" }}>{chip.label}</Text>
                   </View>
                 ))}
               </View>
@@ -915,7 +1592,7 @@ export default function AdminScreen() {
                 <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
                   <Text style={styles.cardTitle}>Live Activity Map</Text>
                   {/* Live badge */}
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "#FEF2F2", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "#F8FAFC", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 }}>
                     <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: "#EF4444" }} />
                     <Text style={{ fontSize: 10, fontFamily: "Inter_600SemiBold", color: "#EF4444" }}>LIVE</Text>
                   </View>
@@ -925,14 +1602,14 @@ export default function AdminScreen() {
                 <AdminActivityMap height={320} />
 
                 {/* Legend */}
-                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: "#F1F5F9" }}>
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: "#F8FAFC" }}>
                   {[
-                    { color: "#3B82F6", label: "User online" },
-                     { color: "#DC2626", label: "Emergency alert" },
+                    { color: "#2563EB", label: "User online" },
+                     { color: "#EF4444", label: "Emergency alert" },
                      { color: "#EF4444", label: "Emergency request" },
                     { color: "#F59E0B", label: "Open request" },
                     { color: "#14B8A6", label: "Being helped" },
-                    { color: "#94A3B8", label: "Completed" },
+                    { color: "#64748B", label: "Completed" },
                   ].map((l) => (
                     <View key={l.label} style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
                       <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: l.color }} />
@@ -947,7 +1624,7 @@ export default function AdminScreen() {
                 <Text style={[styles.cardTitle, { marginBottom: 10 }]}>Live Activity Feed</Text>
 
                 {feedItems.length === 0 && (
-                  <Text style={{ color: "#94A3B8", textAlign: "center", paddingVertical: 20, fontFamily: "Inter_400Regular", fontSize: 13 }}>
+                  <Text style={{ color: "#64748B", textAlign: "center", paddingVertical: 20, fontFamily: "Inter_400Regular", fontSize: 13 }}>
                     No activity yet
                   </Text>
                 )}
@@ -957,7 +1634,7 @@ export default function AdminScreen() {
                     const statusColor =
                       item.isEmergency ? "#EF4444"
                       : item.status === "accepted" ? "#14B8A6"
-                      : item.status === "completed" ? "#94A3B8"
+                      : item.status === "completed" ? "#64748B"
                       : "#F59E0B";
                     const statusLabel =
                       item.status === "accepted" ? "Being helped"
@@ -993,21 +1670,21 @@ export default function AdminScreen() {
                           styles.requestRow,
                           {
                             alignItems: "flex-start",
-                            backgroundColor: "#FEF2F2",
+                            backgroundColor: "#F8FAFC",
                             borderRadius: 12,
                             paddingHorizontal: 10,
                             paddingVertical: 9,
                           },
                         ]}
                       >
-                        <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: "#FEE2E2", alignItems: "center", justifyContent: "center", marginTop: 1 }}>
+                        <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: "#F8FAFC", alignItems: "center", justifyContent: "center", marginTop: 1 }}>
                           <Text style={{ fontSize: 14 }}>🚨</Text>
                         </View>
                         <View style={{ flex: 1 }}>
-                          <Text style={[styles.requestName, { color: "#991B1B" }]} numberOfLines={1}>
+                          <Text style={[styles.requestName, { color: "#EF4444" }]} numberOfLines={1}>
                             Emergency alert from {item.userName}
                           </Text>
-                          <Text style={[styles.requestLoc, { color: "#B91C1C", marginTop: 2 }]} numberOfLines={1}>
+                          <Text style={[styles.requestLoc, { color: "#EF4444", marginTop: 2 }]} numberOfLines={1}>
                             Calling {item.serviceName} · {item.serviceNumber}
                           </Text>
                           <Text style={[styles.requestLoc, { marginTop: 2 }]} numberOfLines={1}>
@@ -1023,7 +1700,7 @@ export default function AdminScreen() {
                   // Donation row
                   return (
                     <View key={item.id} style={[styles.requestRow, { alignItems: "flex-start" }]}>
-                      <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: "#FEF3C718", alignItems: "center", justifyContent: "center", marginTop: 1 }}>
+                      <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: "#F8FAFC18", alignItems: "center", justifyContent: "center", marginTop: 1 }}>
                         <Text style={{ fontSize: 13 }}>{item.itemIcon}</Text>
                       </View>
                       <View style={{ flex: 1 }}>
@@ -1045,7 +1722,7 @@ export default function AdminScreen() {
           <View style={{ padding: 14, gap: 14 }}>
             <View style={styles.card}>
               <Text style={[styles.cardTitle, { marginBottom: 12 }]}>Platform Analytics</Text>
-              <LineChart width={width - 28} />
+              <LineChart width={width - 28} requests={requests} donations={donations} users={allUsers} />
             </View>
             <View style={styles.card}>
               <Text style={[styles.cardTitle, { marginBottom: 10 }]}>Key Metrics</Text>
@@ -1054,7 +1731,7 @@ export default function AdminScreen() {
                 { label: "Help Success Rate", val: "94%", icon: "check-circle", color: "#10B981" },
                 { label: "Emergency Resolve Rate", val: "98%", icon: "alert-circle", color: "#EF4444" },
                 { label: "User Satisfaction", val: "4.8/5", icon: "star", color: "#F59E0B" },
-                { label: "Repeat Helpers", val: "67%", icon: "repeat", color: "#8B5CF6" },
+                { label: "Repeat Helpers", val: "67%", icon: "repeat", color: "#7C3AED" },
               ].map((m) => (
                 <View key={m.label} style={styles.summaryRow}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
@@ -1080,12 +1757,12 @@ export default function AdminScreen() {
                 { label: "Emergency Contacts", icon: "phone" },
                 { label: "Terms & Conditions", icon: "file-text" },
               ].map((s) => (
-                <View key={s.label} style={[styles.summaryRow, { borderBottomWidth: 1, borderBottomColor: "#F1F5F9" }]}>
+                <View key={s.label} style={[styles.summaryRow, { borderBottomWidth: 1, borderBottomColor: "#F8FAFC" }]}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
                     <Feather name={s.icon as any} size={16} color="#64748B" />
                     <Text style={styles.summaryLabel}>{s.label}</Text>
                   </View>
-                  <Feather name="chevron-right" size={16} color="#CBD5E1" />
+                  <Feather name="chevron-right" size={16} color="#DBEAFE" />
                 </View>
               ))}
             </View>
@@ -1101,7 +1778,7 @@ export default function AdminScreen() {
                 </View>
               </View>
               <Pressable
-                onPress={async () => { await logout(); router.replace("/(auth)/portal" as any); }}
+                onPress={handleAdminLogout}
                 style={{ padding: 8 }}
               >
                 <Feather name="log-out" size={20} color="#EF4444" />
@@ -1115,19 +1792,18 @@ export default function AdminScreen() {
       {drawerOpen && (
         <>
           <TouchableWithoutFeedback onPress={closeDrawer}>
-            <Animated.View style={[StyleSheet.absoluteFillObject, { backgroundColor: "rgba(0,0,0,0.45)", opacity: overlayOpacity, zIndex: 10 }]} />
+            <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(0,0,0,0.45)", opacity: overlayOpacity, zIndex: 10 }]} />
           </TouchableWithoutFeedback>
 
           <Animated.View
             style={[styles.drawer, { transform: [{ translateX: drawerX }], paddingTop: topPad, zIndex: 20 }]}
           >
-            <LinearGradient colors={[BLUE_DARK, BLUE_MID, BLUE_LIGHT]} style={StyleSheet.absoluteFillObject} />
+            <LinearGradient colors={[BLUE_DARK, BLUE_MID, BLUE_LIGHT]} style={StyleSheet.absoluteFill} />
 
             {/* Logo */}
             <View style={styles.drawerLogo}>
-              <Image source={logo} style={styles.drawerLogoImg} resizeMode="contain" />
+              <HelpChainLogo width={164} height={100} light />
               <View>
-                <Text style={styles.drawerLogoTitle}>HelpChain</Text>
                 <Text style={styles.drawerLogoSub}>Admin Panel</Text>
               </View>
             </View>
@@ -1159,15 +1835,15 @@ export default function AdminScreen() {
             {/* User + Logout */}
             <View style={styles.drawerUser}>
               <View style={[styles.requestAvatar, { width: 38, height: 38, borderRadius: 19, backgroundColor: "rgba(255,255,255,0.2)" }]}>
-                <Text style={[styles.requestAvatarText, { color: "#fff" }]}>{user?.name?.charAt(0) ?? "A"}</Text>
+                <Text style={[styles.requestAvatarText, { color: "#FFFFFF" }]}>{user?.name?.charAt(0) ?? "A"}</Text>
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.drawerItemText, { color: "#fff" }]}>{user?.name ?? "Admin"}</Text>
+                <Text style={[styles.drawerItemText, { color: "#FFFFFF" }]}>{user?.name ?? "Admin"}</Text>
                 <Text style={{ color: "rgba(255,255,255,0.55)", fontSize: 10, fontFamily: "Inter_400Regular" }}>Super Admin ●</Text>
               </View>
             </View>
             <Pressable
-              onPress={async () => { closeDrawer(); await logout(); router.replace("/(auth)/portal" as any); }}
+              onPress={() => { closeDrawer(); void handleAdminLogout(); }}
               style={styles.drawerLogout}
             >
               <Feather name="log-out" size={14} color="rgba(255,255,255,0.7)" />
@@ -1177,13 +1853,71 @@ export default function AdminScreen() {
           </Animated.View>
         </>
       )}
+
+      <Modal
+        visible={systemSummaryVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSystemSummaryVisible(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: "rgba(15,23,42,0.5)", justifyContent: "center", padding: 20 }}>
+          <View style={{ width: "100%", maxWidth: 560, maxHeight: "80%", alignSelf: "center", backgroundColor: "#FFFFFF", borderRadius: 18, padding: 20 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+              <Text style={styles.cardTitle}>System Summary</Text>
+              <Pressable
+                onPress={() => setSystemSummaryVisible(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Close system summary"
+                hitSlop={10}
+                style={{ padding: 6 }}
+              >
+                <Feather name="x" size={20} color="#64748B" />
+              </Pressable>
+            </View>
+            <Text style={{ color: "#64748B", fontSize: 12, fontFamily: "Inter_400Regular", marginBottom: 12 }}>
+              Current totals for users, help activity, donations, registered centres, and updates.
+            </Text>
+            <ScrollView>
+              {systemSummary.map((summary, index) => {
+                const target: Record<string, Section> = {
+                  "Registered Users": "users",
+                  "Authorised Admins": "users",
+                  "Total Help Requests": "requests",
+                  "Active Help Requests": "requests",
+                  "Donation Contributions": "donations",
+                  "Items Donated": "donations",
+                  "Registered Community Centres": "centres",
+                  "Official Updates": "updates",
+                };
+                return (
+                  <Pressable
+                    key={summary.label}
+                    onPress={() => {
+                      setSystemSummaryVisible(false);
+                      navTo(target[summary.label]);
+                    }}
+                    accessibilityRole="button"
+                    style={[styles.summaryRow, index < systemSummary.length - 1 && { borderBottomWidth: 1, borderBottomColor: "#F8FAFC" }]}
+                  >
+                    <Text style={styles.summaryLabel}>{summary.label}</Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                      <Text style={styles.summaryVal}>{summary.val}</Text>
+                      <Feather name="chevron-right" size={14} color="#DBEAFE" />
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   header: {
-    shadowColor: "#000",
+    shadowColor: "#0B1F3A",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
     shadowRadius: 6,
@@ -1196,7 +1930,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
-  headerTitle: { fontSize: 15, fontFamily: "Inter_700Bold", color: "#1E293B" },
+  headerTitle: { fontSize: 15, fontFamily: "Inter_700Bold", color: "#1E3A5F" },
   headerSub: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#64748B" },
   headerRight: { flexDirection: "row", alignItems: "center", gap: 4 },
   iconBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
@@ -1211,8 +1945,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  notifBadgeText: { fontSize: 8, color: "#fff", fontFamily: "Inter_700Bold" },
-  dateBox: { flexDirection: "row", alignItems: "center", gap: 3, backgroundColor: "#F1F5F9", paddingHorizontal: 7, paddingVertical: 4, borderRadius: 8 },
+  notifBadgeText: { fontSize: 8, color: "#FFFFFF", fontFamily: "Inter_700Bold" },
+  dateBox: { flexDirection: "row", alignItems: "center", gap: 3, backgroundColor: "#F8FAFC", paddingHorizontal: 7, paddingVertical: 4, borderRadius: 8 },
   dateText: { fontSize: 9, color: "#64748B", fontFamily: "Inter_500Medium" },
 
   statCard: {
@@ -1220,7 +1954,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 14,
     gap: 6,
-    shadowColor: "#000",
+    shadowColor: "#0B1F3A",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
     shadowRadius: 4,
@@ -1233,7 +1967,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  statVal: { fontSize: 22, fontFamily: "Inter_700Bold", color: "#1E293B", marginTop: 2 },
+  statVal: { fontSize: 22, fontFamily: "Inter_700Bold", color: "#1E3A5F", marginTop: 2 },
   statLabel: { fontSize: 11, fontFamily: "Inter_500Medium", color: "#64748B" },
   statTrend: { flexDirection: "row", alignItems: "center", gap: 3, marginTop: 2 },
   statTrendText: { fontSize: 9, fontFamily: "Inter_400Regular" },
@@ -1242,46 +1976,48 @@ const styles = StyleSheet.create({
     backgroundColor: CARD,
     borderRadius: 14,
     padding: 16,
-    shadowColor: "#000",
+    shadowColor: "#0B1F3A",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 6,
     elevation: 2,
   },
   cardHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14 },
-  cardTitle: { fontSize: 14, fontFamily: "Inter_700Bold", color: "#1E293B" },
-  cardTitleSub: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#94A3B8" },
-  cardBadge: { flexDirection: "row", alignItems: "center", gap: 3, backgroundColor: "#F1F5F9", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+  cardTitle: { fontSize: 14, fontFamily: "Inter_700Bold", color: "#1E3A5F" },
+  cardTitleSub: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#64748B" },
+  cardBadge: { flexDirection: "row", alignItems: "center", gap: 3, backgroundColor: "#F8FAFC", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
   cardBadgeText: { fontSize: 11, color: "#64748B", fontFamily: "Inter_500Medium" },
   viewAll: { fontSize: 12, color: BLUE_LIGHT, fontFamily: "Inter_600SemiBold" },
 
   requestRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 9, borderTopWidth: 1, borderTopColor: "#F8FAFC" },
   requestAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: "#DBEAFE", alignItems: "center", justifyContent: "center" },
   requestAvatarText: { fontSize: 15, fontFamily: "Inter_700Bold", color: BLUE_LIGHT },
-  requestName: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#1E293B" },
-  requestLoc: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#94A3B8" },
+  requestName: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#1E3A5F" },
+  requestLoc: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#64748B" },
   statusPill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
   statusPillText: { fontSize: 10, fontFamily: "Inter_600SemiBold" },
 
   donationRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 9, borderTopWidth: 1, borderTopColor: "#F8FAFC" },
   donationIcon: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center" },
-  donationTitle: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#1E293B" },
-  donationBy: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#94A3B8", marginTop: 1 },
+  donationTitle: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#1E3A5F" },
+  donationBy: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#64748B", marginTop: 1 },
   donationAmt: { fontSize: 15, fontFamily: "Inter_700Bold", color: "#F59E0B" },
   donationTime: { fontSize: 10, fontFamily: "Inter_400Regular", color: "#14B8A6", marginTop: 1 },
   donationBanner: { borderRadius: 14, padding: 20, flexDirection: "row", alignItems: "center", gap: 16 },
 
   reportRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 9, borderTopWidth: 1, borderTopColor: "#F8FAFC" },
   reportFlag: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
-  reportTitle: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#1E293B" },
-  reportDesc: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#94A3B8", marginTop: 1 },
-  reportTime: { fontSize: 10, fontFamily: "Inter_400Regular", color: "#94A3B8" },
+  reportTitle: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#1E3A5F" },
+  reportDesc: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#64748B", marginTop: 1 },
+  reportTime: { fontSize: 10, fontFamily: "Inter_400Regular", color: "#64748B" },
+  reportResolveButton: { minHeight: 32, borderRadius: 7, backgroundColor: "#EFF6FF", paddingHorizontal: 10, alignItems: "center", justifyContent: "center" },
+  reportResolveText: { color: "#2563EB", fontSize: 11, fontFamily: "Inter_600SemiBold" },
 
   summaryRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 12 },
-  summaryLabel: { fontSize: 13, fontFamily: "Inter_500Medium", color: "#475569" },
-  summaryVal: { fontSize: 13, fontFamily: "Inter_700Bold", color: "#1E293B" },
+  summaryLabel: { fontSize: 13, fontFamily: "Inter_500Medium", color: "#64748B" },
+  summaryVal: { fontSize: 13, fontFamily: "Inter_700Bold", color: "#1E3A5F" },
 
-  sectionHeader: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: "#94A3B8", letterSpacing: 0.8, marginBottom: 2 },
+  sectionHeader: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: "#64748B", letterSpacing: 0.8, marginBottom: 2 },
 
   drawer: {
     position: "absolute",
@@ -1291,9 +2027,7 @@ const styles = StyleSheet.create({
     width: DRAWER_WIDTH,
     overflow: "hidden",
   },
-  drawerLogo: { flexDirection: "row", alignItems: "center", gap: 10, padding: 16 },
-  drawerLogoImg: { width: 40, height: 40, borderRadius: 12 },
-  drawerLogoTitle: { fontSize: 16, fontFamily: "Inter_700Bold", color: "#fff" },
+  drawerLogo: { flexDirection: "column", alignItems: "flex-start", gap: 5, padding: 16 },
   drawerLogoSub: { fontSize: 10, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.65)" },
   drawerDivider: { height: 1, backgroundColor: "rgba(255,255,255,0.15)", marginHorizontal: 16, marginVertical: 6 },
   drawerItem: {
@@ -1305,7 +2039,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 8,
     borderRadius: 10,
   },
-  drawerItemActive: { backgroundColor: "#fff" },
+  drawerItemActive: { backgroundColor: "#FFFFFF" },
   drawerItemText: { fontSize: 13, fontFamily: "Inter_500Medium" },
   drawerUser: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 14, paddingVertical: 12 },
   drawerLogout: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 14, paddingVertical: 10 },
